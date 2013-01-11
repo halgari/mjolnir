@@ -254,9 +254,23 @@
   (InitializeX86Target)
   (InitializeX86TargetMC))
 
+(def CCallConv 0)
+(def FastCallConv 8)
+(def ColdCallConv 9)
+(def X86StdcallCallConv 64)
+(def X86FastcallCallConv 65)
+
+(def AbortProcessAction 0)
+(def PrintMessageAction 1)
+(def ReturnStatusAction 2)
+
+
 (defn map-parr [fn coll]
   (into-array Pointer
               (map fn coll)))
+
+(defn value-at [ptr]
+  (.getPointer ptr 0))
 
 (def kw->linkage
   {:extern LLVMExternalLinkage})

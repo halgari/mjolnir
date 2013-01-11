@@ -6,9 +6,21 @@
                       " got: " (pr-str ~(second pred)))))
 
 
+(defmacro validate-all [& body]
+  `(apply valid? ~(vec body)))
+
+(defmacro assure-same-type [& body]
+  `(reduce (fn [a# x#]
+             (assert (= a# x#)
+                     (str "Expected same types, "
+                      "at: " (pr-str (meta (:location ~'this)))
+                      " got: " (pr-str ~(vec body)))))
+           ~(vec body)))
+
+(defprotocol Validatable
+  (validate [this]))
 
 (defprotocol Type
-  (validate [this])
   (llvm-type [this]))
 
 (defn valid? [tp]
@@ -28,17 +40,19 @@
                       " got: " (pr-str tp))))
 
 (defrecord IntegerType [width]
-  Type
+  Validatable
   (validate [this]
     (assure (integer? width)))
+  Type
   (llvm-type [this]
     (llvm/IntType width)))
 
 
 (defrecord PointerType [etype]
-  Type
+  Validatable
   (validate [this]
     (assure-type etype))
+  Type
   (llvm-type [this]
     (llvm/PointerType (llvm-type etype) 0))
   ElementPointer
@@ -46,16 +60,19 @@
     (:etype this)))
 
 (defrecord FunctionType [arg-types ret-type]
-  Type
+  Validatable
   (validate [this]
     (every? assure-type arg-types)
     (assure-type ret-type))
+  Type
   (llvm-type [this]
     (llvm/FunctionType (llvm-type ret-type)
                        (llvm/map-parr llvm-type arg-types)
                        (count arg-types)
                        false)))
 
+(defn FunctionType? [tp]
+  (instance? FunctionType tp))
 
 
 
