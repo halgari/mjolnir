@@ -80,6 +80,7 @@
 ;; Common types
 (def Int32 (->IntegerType 32))
 (def Int64 (->IntegerType 64))
+(def Int1 (->IntegerType 1))
 (def I8* (->PointerType (->IntegerType 8)))
 
 

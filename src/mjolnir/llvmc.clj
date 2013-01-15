@@ -3,7 +3,7 @@
   (:require [clojure.java.shell :as shell]
             [clojure.string :as string]))
 
-(def ^:dynamic *lib* 'LLVM-3.1)
+(def ^:dynamic *lib* 'LLVM-3.3svn)
 
 (def strip-chars 4)
 
@@ -162,6 +162,7 @@
 (defnative Pointer LLVMBuildShl)
 (defnative Pointer LLVMBuildLShr)
 (defnative Pointer LLVMBuildAnd)
+(defnative Pointer LLVMBuildOr)
 (defnative Pointer LLVMBuildMalloc)
 
 (def ^:dynamic *module* (ModuleCreateWithName "tmp"))
@@ -170,6 +171,14 @@
 (def ^:dynamic *builder*)
 (def ^:dynamic *block*)
 
+(defn init-target []
+  (LinkInJIT)
+  (LinkInInterpreter)
+  (InitializeX86TargetInfo)
+  (InitializeX86Target)
+  (InitializeX86TargetMC))
+
+(init-target)
 
 (def LLVMIntEQ 32)
 

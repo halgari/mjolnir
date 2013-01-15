@@ -7,6 +7,14 @@
 (defn register-global [ns nm gbl]
   (swap! registered-globals assoc-in [ns nm] gbl))
 
+(defn c-do [& body]
+  (exp/->Do body))
+
+(defn c-iadd [a b]
+  (exp/->IAdd a b))
+
+(defn c-isub [a b]
+  (exp/->ISub a b))
 
 (defn c-module
   [& body]
@@ -15,9 +23,10 @@
 (defn c-if [test then else]
   (exp/->If test then else))
 
+
 (defn c-fn-t [args ret]
   {:post [(tp/valid? %)]}
-  (tp/map->FunctionType args ret))
+  (tp/->FunctionType args ret))
 
 (defmacro c-fn [name tp args & body]
   {:pre [name tp args]}
@@ -40,19 +49,31 @@
                         (range))
         arg-types (mapv first args)]
     `(let [nsname# (.getName ~'*ns*)
+           ~'_ (defn ~name
+         [& args#]
+         (exp/->Call (exp/->Global (str nsname# "/" ~(clojure.core/name name))
+                                   (c-fn-t ~(mapv first args) ~ret-type)) (vec args#)))
            f# (c-fn (str nsname# "/" ~(clojure.core/name name))
                    (c-fn-t ~(mapv first args) ~ret-type)
                    ~(mapv second args)
                    ~@body)]
        (register-global nsname# ~(clojure.core/name name) f#)
-       (defn ~name
-         [& args#]
-         (exp/->Call f# (vec args#))))))
+       )))
 
 (defn c-or [a b]
-  nil)
+  (exp/->Or a b))
 (defn c-is [a b]
-  nil)
+  (exp/->Is a b))
+
+(defn c-module [includes & body]
+  (exp/->Module "main"
+               (-> (reduce (fn [a x]
+                                    (concat a
+                                            (vals (@registered-globals x))))
+                                  []
+                                  includes)
+                          (concat body)
+                          vec)))
 
 ;; Black magic is here
 (let [ns (create-ns 'mjolnir.constructors)]
@@ -63,3 +84,5 @@
                          @var)]
         (.setMeta nvar (meta var))
         nvar))))
+
+
