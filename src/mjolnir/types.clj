@@ -30,6 +30,9 @@
 (defprotocol ElementPointer
   (etype [this]))
 
+(defn ElementPointer? [t]
+  (extends? ElementPointer (type t)))
+
 (defn type? [this]
   (extends? Type (type this)))
 
@@ -47,6 +50,15 @@
   (llvm-type [this]
     (llvm/IntType width)))
 
+(defrecord FloatType [width]
+  Validatable
+  (validate [this]
+    (assure (integer? width)))
+  Type
+  (llvm-type [this]
+    (case width
+      32 (llvm/FloatType))))
+
 
 (defrecord PointerType [etype]
   Validatable
@@ -55,6 +67,18 @@
   Type
   (llvm-type [this]
     (llvm/PointerType (llvm-type etype) 0))
+  ElementPointer
+  (etype [this]
+    (:etype this)))
+
+(defrecord ArrayType [etype cnt]
+  Validatable
+  (validate [this]
+    (assure-type etype)
+    (assure (integer? cnt)))
+  Type
+  (llvm-type [this]
+    (llvm/ArrayType (llvm-type etype) cnt))
   ElementPointer
   (etype [this]
     (:etype this)))
@@ -83,4 +107,5 @@
 (def Int1 (->IntegerType 1))
 (def I8* (->PointerType (->IntegerType 8)))
 
+(def Float32 (->FloatType 32))
 

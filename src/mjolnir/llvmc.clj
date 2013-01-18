@@ -153,6 +153,7 @@
 (defnative Pointer LLVMGetNamedFunction)
 (defnative Pointer LLVMInt8Type)
 (defnative Pointer LLVMInt1Type)
+(defnative Pointer LLVMFloatType)
 (defnative Pointer LLVMPointerType)
 (defnative Integer LLVMSetLinkage)
 (defnative Integer LLVMGetIntTypeWidth)

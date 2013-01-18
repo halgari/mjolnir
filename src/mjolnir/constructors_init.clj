@@ -16,7 +16,7 @@
 (defn c-isub [a b]
   (exp/->ISub a b))
 
-(defn c-module
+#_(defn c-module
   [& body]
   (exp/->Module (name (gensym "module_")) body))
 
@@ -66,14 +66,87 @@
   (exp/->Is a b))
 
 (defn c-module [includes & body]
-  (exp/->Module "main"
-               (-> (reduce (fn [a x]
-                                    (concat a
-                                            (vals (@registered-globals x))))
+  (println "g" @registered-globals)
+  (doto (exp/->Module "main"
+                      (-> (reduce (fn [a x]
+                                    (if (namespace x)
+                                      (let [exp (get-in @registered-globals
+                                                    [(symbol (namespace x))
+                                                     (name x)])]
+                                        (assert exp (str "Can't find include "
+                                                         (symbol (namespace x))
+                                                         " "
+                                                         (name x)
+                                                         " "
+                                                         (keys @registered-globals)
+                                                         " "
+                                                         (keys (@registered-globals
+                                                                (symbol (namespace x))))))
+                                        (conj a exp))
+                                      (concat a
+                                              (vals (@registered-globals x)))))
                                   []
                                   includes)
                           (concat body)
-                          vec)))
+                          vec))
+    println))
+
+(defn c-aset [arr idx val]
+  (exp/->ASet arr (if (vector? idx) idx [idx]) val))
+
+(defn c-aget [arr idx]
+  (exp/->AGet arr (if (vector? idx) idx [idx])))
+
+(defmacro c-local [nm]
+  `(exp/->Local ~(name nm)))
+
+(defmacro c-loop [binds & body]
+  (let [sbinds (partition 2 binds)]
+    `(exp/->Loop ~(vec (map (fn [[nm bind]]
+                              [(name nm)
+                               bind])
+                            sbinds))
+                 (let [~@(mapcat (fn [[nm _]]
+                                   [nm (list 'mjolnir.expressions/->Local (name nm))])
+                                 sbinds)]
+                   (c-do ~@body)))))
+
+(defmacro c-recur [& items]
+  (let [arr (butlast items)
+        _ (assert (or (= (last arr) '->)
+                      (= (last arr) "->")) "Missing type at end of recur")
+        tp (last items)
+        items (butlast arr)]
+    `(exp/->Recur ~(vec items) ~tp)))
+
+(defmacro c-dotimes [[sym times] & body]
+  `(exp/->Loop [[~(name sym) 0]]
+              (let [~sym (c-local ~sym)]
+                (exp/->Do [~@body
+                           (c-if (c-is ~times ~sym)
+                                 0
+                                 (c-recur (c-iadd 1 ~sym) "->" tp/Int32))]))))
+
+(defmacro c-let [bindings & body]
+  (reduce (fn [a [local binding]]
+            (let [s (name (gensym (str (name local) "_")))]
+              `(exp/->Let ~(name local) ~binding 
+                         (let [~local (c-local ~local)]
+                               ~a))))
+           `(exp/->Do ~(vec body))
+          (reverse (partition 2 bindings))))
+
+(defn c-malloc [type cnt]
+  (exp/->Malloc type cnt))
+
+(defn c-free [val]
+  (exp/->Free val))
+
+(defmacro c-using [[sym resource] & body]
+  `(c-let [~sym ~resource
+           ret# (c-do ~@body)]
+          (c-free ~sym)
+          ret#))
 
 ;; Black magic is here
 (let [ns (create-ns 'mjolnir.constructors)]

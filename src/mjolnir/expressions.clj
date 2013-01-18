@@ -7,8 +7,13 @@
 (def ^:dynamic *module*)
 (def ^:dynamic *fn*)
 (def ^:dynamic *llvm-fn*)
-(def ^:dynamic *locals*)
-(def ^:dynamic *block*)
+(def ^:dynamic *locals* {})
+(def ^:dynamic *llvm-locals*)
+(def ^:dynamic *llvm-recur-point*)
+(def ^:dynamic *llvm-recur-phi*)
+(def ^:dynamic *llvm-recur-block*)
+(def ^:dynamic *block* (atom nil))
+(def ^:dynamic *recur-point*)
 
 (def genname (comp name symbol))
 
@@ -144,9 +149,9 @@
         (llvm/SetFunctionCallConv fnc llvm/CCallConv)
         (binding [*fn* this
                   *llvm-fn* fnc
-                  *locals* newargs
-                  *block* (llvm/AppendBasicBlock fnc (genname "fblk_"))]
-          (llvm/PositionBuilderAtEnd *builder* *block*)
+                  *llvm-locals* newargs]
+          (reset! *block* (llvm/AppendBasicBlock fnc (genname "fblk_")))
+          (llvm/PositionBuilderAtEnd *builder* @*block*)
           (llvm/BuildRet *builder* (build body) (genname "return_"))
           fnc))))
   GlobalExpression
@@ -177,8 +182,10 @@
           (stub-global exp))
         (doseq [exp body]
           (build exp))
-        (llvm/VerifyModule module llvm/AbortProcessAction error)
+        (Thread/sleep 1000)
+        (llvm/VerifyModule module llvm/PrintMessageAction error)
         (llvm/DumpModule module)
+        (Thread/sleep 2000)
         (llvm/DisposeMessage (llvm/value-at error))
         module))))
 
@@ -259,6 +266,162 @@
   (build [this]
     (llvm/BuildSub *builder* (build a) (build b) (genname "isub_"))))
 
+(defrecord Local [nm]
+  Validatable
+  (validate [this]
+    (assure (string? nm))
+    (println *locals* nm)
+    (assure (type? (*locals* nm))))
+  Expression
+  (return-type [this]
+    (*locals* nm))
+  (build [this]
+    (let [a (*llvm-locals* nm)]
+      (assert a (str "Can't find local " nm))
+      a)))
+
+(defrecord Loop [itms body]
+  Validatable
+  (validate [this]
+    (doseq [[nm init] itms]
+      (assure (string? nm))
+      (assure (valid? init)))
+    (binding [*locals* (merge *locals*
+                              (zipmap (map first itms)
+                                      (map (comp return-type second) itms)))
+              *recur-point* (map (comp return-type second) itms)]
+      (assure (valid? body))))
+  Expression
+  (return-type [this]
+    (binding [*locals* (merge *locals*
+                              (zipmap (map first itms)
+                                      (map (comp return-type second) itms)))]
+      (return-type body)))
+  (build [this]
+    (binding [*locals* (merge *locals*
+                              (zipmap (map first itms)
+                                      (map (comp return-type second) itms)))
+              *recur-point* (map (comp return-type second) itms)]
+      (let [inits (doall (map (fn [itm]
+                                (build itm))
+                              (map second itms)))
+            loopblk (llvm/AppendBasicBlock *llvm-fn* (genname "loop_"))
+            endblk (llvm/AppendBasicBlock *llvm-fn* (genname "loopexit_"))
+            _ (llvm/BuildBr *builder* loopblk)
+            _ (llvm/PositionBuilderAtEnd *builder* loopblk)
+            phis (doall (map (fn [itm]
+                               (let [phi (llvm/BuildPhi *builder*
+                                                    (llvm-type (return-type itm))
+                                                    (genname "loopval_"))]
+                                 (llvm/AddIncoming phi
+                                                   (into-array Pointer [(build itm)])
+                                                   (into-array Pointer [@*block*])
+                                                   1)
+                                 phi))
+                             (map second itms)))]
+                    
+            
+       
+        (binding [*llvm-locals* (merge *llvm-locals*
+                                       (zipmap (map first itms)
+                                               phis))
+                  *llvm-recur-point* loopblk
+                  *llvm-recur-phi* phis]
+          
+          (let [ret (build body)]
+            (llvm/BuildBr *builder* endblk)
+            (llvm/PositionBuilderAtEnd *builder* endblk)
+            ret))))))
+
+(defrecord Let [nm bind body]
+  Validatable
+  (validate [this]
+    (valid? bind)
+    (assure (string? nm))
+    (binding [*locals* (assoc *locals*
+                         nm (return-type bind))]
+      (valid? body)))
+  Expression
+  (return-type [this]
+    (binding [*locals* (assoc *locals*
+                         nm (return-type bind))]
+      (return-type body)))
+  (build [this]
+    (binding [*locals* (assoc *locals*
+                         nm (return-type bind))
+              *llvm-locals* (assoc *llvm-locals*
+                              nm (build bind))]
+      (build body))))
+
+(defrecord Malloc [type cnt]
+  Validatable
+  (validate [this]
+    (assure (type? type))
+    (assure (integer? cnt)))
+  Expression
+  (return-type [this]
+    (->ArrayType type cnt))
+  (build [this]
+    (llvm/BuildMalloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
+
+(defrecord ASet [arr idx val]
+  Validatable
+  (validate [this]
+    (assure (vector? idx))
+    (doseq [i idx]
+      (assure (valid? i)))
+    (assure (valid? arr))
+    (assure (valid? val))
+    (assure (ElementPointer? (return-type arr))))
+  Expression
+  (return-type [this]
+    (return-type arr)))
+
+(defrecord AGet [arr idx]
+  Validatable
+  (validate [this]
+    (assure (valid? arr))
+    (assure (vector? idx))
+    (doseq [i idx]
+      (assure (valid? i)))
+    (assure (ElementPointer? (return-type arr))))
+  Expression
+  (return-type [this]
+    (etype (return-type arr))))
+
+(defrecord Recur [items type]
+  Validatable
+  (validate [this]
+    (assure (= (count items) (count *recur-point*)))
+    (assure (type? type))
+    (dotimes [x (count items)]
+      (let [itm (nth items x)
+            rp-itm (nth *recur-point* x)]
+        (assure-same-type (return-type itm) rp-itm))))
+  Expression
+  (return-type [this]
+    type)
+  (build [this]
+    (let [d (into-array Pointer
+                        (map build items))]
+      (llvm/BuildBr *builder* *llvm-recur-point*)
+      (reset! *block* (llvm/AppendBasicBlock *llvm-fn* (genname "recur_dummy")))
+      (llvm/PositionBuilderAtEnd *builder* @*block*)
+      (dotimes [idx (count *llvm-recur-phi*)]
+        (llvm/AddIncoming (nth *llvm-recur-phi* idx)
+                          (into-array Pointer [(nth *llvm-recur-phi* idx)])
+                          (into-array Pointer [*llvm-recur-point*])
+                          1))
+      (build 0))))
+
+(defrecord Free [val]
+  Validatable
+  (validate [this]
+    (ElementPointer? (return-type val)))
+  Expression
+  (return-type [this]
+    Int32))
+
 (defrecord Do [body]
   Validatable
   (validate [this]
@@ -302,6 +465,16 @@
     (llvm/ConstInt (llvm-type (return-type this))
                    this
                    true)))
+
+(extend-type java.lang.Double
+  Validatable
+  (validate [this]
+    true)
+  Expression
+  (return-type [this]
+    Double)
+  #_(build [this]
+    (llvm/ConstFloat this)))
 
 
 (defn engine [module]
