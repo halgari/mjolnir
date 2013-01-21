@@ -102,6 +102,7 @@
 (defnative Pointer LLVMBuildAdd)
 (defnative Pointer LLVMBuildSub)
 (defnative Pointer LLVMConstInt)
+(defnative Pointer LLVMConstReal)
 (defnative Pointer LLVMBuildICmp)
 (defnative Pointer LLVMIntType)
 (defnative Pointer LLVMBuildCondBr)

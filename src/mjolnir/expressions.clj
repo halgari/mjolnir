@@ -1,7 +1,19 @@
 (ns mjolnir.expressions
-  (:require [mjolnir.types :refer :all])
-  (:require [mjolnir.llvmc :as llvm])
+  (:require [mjolnir.types :refer :all]
+            [mjolnir.llvmc :as llvm]
+            [clojure.java.shell :as shell]
+            [clojure.string :as string]
+            [bbloom.fipp.edn :refer (pprint pretty pretty-map) :rename {pprint fipp}])
   (:import [com.sun.jna Native Pointer]))
+
+(defmethod pretty clojure.lang.IRecord [r]
+    [:span (-> r class .getName (clojure.string/split #"\.") last) (pretty-map r)])
+
+(defn pdebug [x]
+  (println "-------------")
+  (fipp x)
+  (println "-------------")
+  x)
 
 (def ^:dynamic *builder*)
 (def ^:dynamic *module*)
@@ -15,7 +27,7 @@
 (def ^:dynamic *block* (atom nil))
 (def ^:dynamic *recur-point*)
 
-(def genname (comp name symbol))
+(def genname (comp name gensym))
 
 (defprotocol Expression
   (return-type [this])
@@ -185,7 +197,7 @@
         (Thread/sleep 1000)
         (llvm/VerifyModule module llvm/PrintMessageAction error)
         (llvm/DumpModule module)
-        (Thread/sleep 2000)
+        #_(Thread/sleep 1000)
         (llvm/DisposeMessage (llvm/value-at error))
         module))))
 
@@ -207,19 +219,30 @@
           cmpval (build test)
           _ (llvm/BuildCondBr *builder* cmpval thenblk elseblk)
           _ (llvm/PositionBuilderAtEnd *builder* thenblk)
+          _ (reset! *block* thenblk)
           thenval (build then)
-          _ (llvm/BuildBr *builder* endblk)
+          _ (when-not (= thenval :terminated)
+              (llvm/BuildBr *builder* endblk))
           _ (llvm/PositionBuilderAtEnd *builder* elseblk)
+          _ (reset! *block* elseblk)
           elseval (build else)
-          _ (llvm/BuildBr *builder* endblk)
+          _ (when-not (= elseval :terminated)
+              (llvm/BuildBr *builder* endblk))
           _ (llvm/PositionBuilderAtEnd *builder* endblk)
+          _ (reset! *block* endblk)
           phi (llvm/BuildPhi *builder*
                              (llvm-type (return-type this))
                              (genname "iflanding_"))]
-      (llvm/AddIncoming phi
-                        (into-array Pointer [thenval elseval])
-                        (into-array Pointer [thenblk elseblk])
-                        2)
+      (when-not (= thenval :terminated)
+        (llvm/AddIncoming phi
+                          (into-array Pointer [thenval])
+                          (into-array Pointer [thenblk])
+                          1))
+      (when-not (= elseval :terminated)
+        (llvm/AddIncoming phi
+                          (into-array Pointer [elseval])
+                          (into-array Pointer [elseblk])
+                          1))      
       phi)))
 
 (defrecord Call [fn args]
@@ -270,7 +293,7 @@
   Validatable
   (validate [this]
     (assure (string? nm))
-    (println *locals* nm)
+    (println "locals ->> " *locals* nm)
     (assure (type? (*locals* nm))))
   Expression
   (return-type [this]
@@ -330,6 +353,7 @@
           
           (let [ret (build body)]
             (llvm/BuildBr *builder* endblk)
+            (reset! *block* endblk)
             (llvm/PositionBuilderAtEnd *builder* endblk)
             ret))))))
 
@@ -375,7 +399,25 @@
     (assure (ElementPointer? (return-type arr))))
   Expression
   (return-type [this]
-    (return-type arr)))
+    (return-type arr))
+  (build [this]
+    (let [a (build arr)
+          casted (llvm/BuildBitCast *builder*
+                                    a
+                                    (-> this
+                                        return-type
+                                        etype
+                                        ->PointerType
+                                        llvm-type)
+                                    (genname "casted_"))
+          gep (llvm/BuildGEP *builder*
+                            casted
+                            (into-array Pointer
+                                        (map build idx))
+                            (count idx)
+                            (genname "gep_"))]
+      (llvm/BuildStore *builder* (build val) gep)
+      a)))
 
 (defrecord AGet [arr idx]
   Validatable
@@ -387,7 +429,24 @@
     (assure (ElementPointer? (return-type arr))))
   Expression
   (return-type [this]
-    (etype (return-type arr))))
+    (etype (return-type arr)))
+  (build [this]
+    (let [casted (llvm/BuildBitCast *builder*
+                                    (build arr)
+                                    (-> this
+                                        return-type
+                                        ->PointerType
+                                        llvm-type)
+                                    (genname "casted_"))
+          gep (llvm/BuildGEP *builder*
+                             casted
+                            (into-array Pointer
+                                        (map build idx))
+                            (count idx)
+                            (genname "gep_"))]
+      (llvm/BuildLoad *builder*
+                      gep
+                      (genname "load_")))))
 
 (defrecord Recur [items type]
   Validatable
@@ -402,17 +461,14 @@
   (return-type [this]
     type)
   (build [this]
-    (let [d (into-array Pointer
-                        (map build items))]
+    (let [d (mapv build items)]
       (llvm/BuildBr *builder* *llvm-recur-point*)
-      (reset! *block* (llvm/AppendBasicBlock *llvm-fn* (genname "recur_dummy")))
-      (llvm/PositionBuilderAtEnd *builder* @*block*)
       (dotimes [idx (count *llvm-recur-phi*)]
         (llvm/AddIncoming (nth *llvm-recur-phi* idx)
-                          (into-array Pointer [(nth *llvm-recur-phi* idx)])
-                          (into-array Pointer [*llvm-recur-point*])
+                          (into-array Pointer [(nth d idx)])
+                          (into-array Pointer [@*block*])
                           1))
-      (build 0))))
+      :terminated)))
 
 (defrecord Free [val]
   Validatable
@@ -420,7 +476,10 @@
     (ElementPointer? (return-type val)))
   Expression
   (return-type [this]
-    Int32))
+    Int32)
+  (build [this]
+    (llvm/BuildFree *builder* (build val))
+    (build 0)))
 
 (defrecord Do [body]
   Validatable
@@ -472,9 +531,9 @@
     true)
   Expression
   (return-type [this]
-    Double)
-  #_(build [this]
-    (llvm/ConstFloat this)))
+    Float32)
+  (build [this]
+    (llvm/ConstReal (llvm-type Float32) this)))
 
 
 (defn engine [module]
@@ -494,8 +553,11 @@
    :else (assert false "Can't convert value")))
 
 (defn get-fn [engine module name]
-  (let [f (llvm/GetNamedFunction module name)]
+  (let [f (llvm/GetNamedFunction module name)
+        ftype (*)]
+    (assert f "Can't find function")
     (fn [& args]
+      (println "Running..." args f)
       (let [p (into-array Pointer (map java-to-llvm-arg args))
             ex_res (llvm/RunFunction (llvm/value-at engine) f (count p) p)
             ires (llvm/GenericValueToInt ex_res 0)]
@@ -503,3 +565,70 @@
           (llvm/DisposeGenericValue x))
         (llvm/DisposeGenericValue ex_res)
         ires))))
+
+
+
+
+
+;; compilation
+
+(defn temp-file [prefix ext]
+  (let [file (java.io.File/createTempFile prefix ext)]
+    (.deleteOnExit file)
+    (.getCanonicalPath file)))
+
+(defn dump-module-to-temp-file [module]
+  (let [file (temp-file "mod_dump" ".bc")]
+    (llvm/WriteBitcodeToFile module file)
+    file))
+
+
+(defn write-object-file [module march] 
+  (let [file (dump-module-to-temp-file module)
+        ofile (temp-file "o_dump" ".o")
+        cmds ["/usr/local/bin/llc" "-filetype=obj" "-o" ofile file]
+        cmds (if march (concat cmds ["--march" march]) cmds)
+        {:keys [out err exit] :as mp} (apply shell/sh cmds)]
+    (apply shell/sh ["/usr/local/bin/llc" "-filetype=asm" "-o" "foo.s" file])
+    (println cmds)
+    (assert (= exit 0) err)
+    
+    ofile))
+
+(defn interpret-opt [op]
+  (cond (vector? op)
+        (let [res (apply shell/sh op)]
+          (assert (= 0 (:exit res)) (:err res))
+          (string/split (string/trim (:out res)) #"[ \n]"))
+        :else
+        [op]))
+
+(defn link-object-file [module filename march & opts]
+  (let [tmp (write-object-file module march)
+        opts (mapcat interpret-opt opts)
+        cmds (concat ["gcc" tmp]
+                                    opts
+                                    ["-o" filename "--shared"])
+        _ (println cmds)
+        res (apply shell/sh cmds)]
+    (assert (= 0 (:exit res)) res)
+    (:out res)))
+
+(defn link-exe [obj out]
+  (let [cmds (concat ["gcc" obj "-o" out "-lc"])
+        _ (println cmds)
+        res (apply shell/sh cmds)]
+    (assert (= 0 (:exit res)) res)
+    (:out res)))
+
+
+
+(defn compile-as-exe [ast]
+  (let [mod (compile ast)
+        ofile (write-object-file mod "x86-64")
+        exe-file (temp-file "exe_gen" "out")
+        out (link-exe ofile exe-file)]
+    exe-file))
+
+(defn run-exe [file & args]
+     (apply shell/sh file args))

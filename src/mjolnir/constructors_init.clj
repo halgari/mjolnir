@@ -25,7 +25,7 @@
 
 
 (defn c-fn-t [args ret]
-  {:post [(tp/valid? %)]}
+  #_{:post [(tp/valid? %)]}
   (tp/->FunctionType args ret))
 
 (defmacro c-fn [name tp args & body]
@@ -41,6 +41,7 @@
 
 
 (defmacro c-defn [name args & body]
+  {:pre [(even? (count args))]}
   (let [args (partition 2 args)
        ret-fn (comp (partial = '->) first)
        ret-type (second (first (filter ret-fn args)))
@@ -89,7 +90,7 @@
                                   includes)
                           (concat body)
                           vec))
-    println))
+    #_println))
 
 (defn c-aset [arr idx val]
   (exp/->ASet arr (if (vector? idx) idx [idx]) val))

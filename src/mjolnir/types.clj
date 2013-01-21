@@ -59,7 +59,6 @@
     (case width
       32 (llvm/FloatType))))
 
-
 (defrecord PointerType [etype]
   Validatable
   (validate [this]
