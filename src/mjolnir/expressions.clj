@@ -50,6 +50,38 @@
     (llvm/ConstInt (llvm-type type) value true)))
 
 
+(defrecord BitCast [a tp]
+  Validatable
+  (validate [this]
+    (assure (Expression? a))
+    (assure (type? tp)))
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (llvm/BuildBitCast *builder* (build a) (llvm-type tp) (genname "bitcast_"))))
+
+(defrecord Trunc [a tp]
+  Validatable
+  (validate [this]
+    (assure (Expression? a))
+    (assure (type? tp)))
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (llvm/BuildTrunc *builder* (build a) (llvm-type tp) (genname "trunk_"))))
+
+(defrecord ZExt [a tp]
+  Validatable
+  (validate [this]
+    (assure (Expression? a))
+    (assure (type? tp)))
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (llvm/BuildZExt *builder* (build a) (llvm-type tp) (genname "zext_"))))
 
 (defrecord Add [a b]
   Validatable
@@ -91,6 +123,17 @@
     Int1)
   (build [this]
     (llvm/BuildICmp *builder* llvm/LLVMIntEQ (build a) (build b) (genname "is_"))))
+
+(defrecord Not [a]
+  Validatable
+  (validate [this]
+    (assure (valid? a))
+    (assure-same-type (return-type a) Int1))
+  Expression
+  (return-type [this]
+    Int1)
+  (build [this]
+    (llvm/BuildNot *builder* (build a) "not_")))
 
 (defprotocol IFunctionExpression
   (argument [this idx] "Get an expression for the given argument"))
@@ -142,10 +185,13 @@
       (assure-type type)
       (assure (FunctionType? type))
       (assure (every? string? arg-names))
-      (assure (Expression? body))
+      (when body
+        (assure (Expression? body))
+        (valid? body)
+        (assure-same-type (return-type body) (:ret-type type)))
       (assure (= (count (:arg-types type)) (count arg-names)))
-      (valid? body)
-      (assure-same-type (return-type body) (:ret-type type))
+      
+      
       (when-let [linkage (:linkage this)]
         (assure (llvm/kw->linkage linkage)))))
   Expression
@@ -194,9 +240,9 @@
           (stub-global exp))
         (doseq [exp body]
           (build exp))
-        (Thread/sleep 1000)
+        #_(Thread/sleep 1000)
         (llvm/VerifyModule module llvm/PrintMessageAction error)
-        (llvm/DumpModule module)
+        #_(llvm/DumpModule module)
         #_(Thread/sleep 1000)
         (llvm/DisposeMessage (llvm/value-at error))
         module))))
@@ -293,7 +339,6 @@
   Validatable
   (validate [this]
     (assure (string? nm))
-    (println "locals ->> " *locals* nm)
     (assure (type? (*locals* nm))))
   Expression
   (return-type [this]
@@ -332,16 +377,16 @@
             endblk (llvm/AppendBasicBlock *llvm-fn* (genname "loopexit_"))
             _ (llvm/BuildBr *builder* loopblk)
             _ (llvm/PositionBuilderAtEnd *builder* loopblk)
-            phis (doall (map (fn [itm]
+            phis (doall (map (fn [[built exp]]
                                (let [phi (llvm/BuildPhi *builder*
-                                                    (llvm-type (return-type itm))
+                                                    (llvm-type (return-type exp))
                                                     (genname "loopval_"))]
                                  (llvm/AddIncoming phi
-                                                   (into-array Pointer [(build itm)])
+                                                   (into-array Pointer [built])
                                                    (into-array Pointer [@*block*])
                                                    1)
                                  phi))
-                             (map second itms)))]
+                             (map vector inits (map second itms))))]
                     
             
        
@@ -583,6 +628,18 @@
     file))
 
 
+
+
+(defn optimize [module]
+  (let [pass (llvm/CreatePassManager)]
+    (llvm/AddDefaultPasses pass)
+    (llvm/RunPassManager pass module)
+    (llvm/DisposePassManager pass)
+    (llvm/DumpModule module)
+    module))
+
+
+
 (defn write-object-file [module march] 
   (let [file (dump-module-to-temp-file module)
         ofile (temp-file "o_dump" ".o")
@@ -623,9 +680,8 @@
 
 
 
-(defn compile-as-exe [ast]
-  (let [mod (compile ast)
-        ofile (write-object-file mod "x86-64")
+(defn compile-as-exe [mod]
+  (let [ofile (write-object-file mod "x86-64")
         exe-file (temp-file "exe_gen" "out")
         out (link-exe ofile exe-file)]
     exe-file))

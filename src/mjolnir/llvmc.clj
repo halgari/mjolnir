@@ -119,12 +119,6 @@
 (defnative Pointer LLVMBuildFree)
 (defnative Pointer LLVMBuildLoad)
 (defnative Pointer LLVMBuildStore)
-
-(defnative Integer LLVMAddConstantPropagationPass)
-(defnative Integer LLVMAddInstructionCombiningPass)
-(defnative Integer LLVMAddPromoteMemoryToRegisterPass)
-(defnative Integer LLVMAddGVNPass)
-(defnative Integer LLVMAddCFGSimplificationPass)
 (defnative Pointer LLVMBuildArrayMalloc)
 (defnative Pointer LLVMBuildGEP)
 (defnative Pointer LLVMBuildBitCast)
@@ -164,8 +158,27 @@
 (defnative Pointer LLVMBuildShl)
 (defnative Pointer LLVMBuildLShr)
 (defnative Pointer LLVMBuildAnd)
+(defnative Pointer LLVMBuildNot)
+(defnative Pointer LLVMBuildZExt)
+(defnative Pointer LLVMBuildTrunc)
 (defnative Pointer LLVMBuildOr)
 (defnative Pointer LLVMBuildMalloc)
+
+
+(defnative Integer LLVMAddConstantPropagationPass)
+(defnative Integer LLVMAddInstructionCombiningPass)
+(defnative Integer LLVMAddPromoteMemoryToRegisterPass)
+(defnative Integer LLVMAddGVNPass)
+(defnative Integer LLVMAddCFGSimplificationPass)
+
+(defn AddDefaultPasses [pm]
+  (doto pm
+    AddConstantPropagationPass
+    AddInstructionCombiningPass
+    AddPromoteMemoryToRegisterPass
+    AddGVNPass
+    AddCFGSimplificationPass))
+
 
 (def ^:dynamic *module* (ModuleCreateWithName "tmp"))
 (def ^:dynamic *fn*)

@@ -36,9 +36,9 @@
             :body (let ~(vec (mapcat (fn [x idx] [x (exp/->Argument idx)])
                                      args
                                      (range)))
-                    (c-do ~@body))}))
-
-
+                    (if ~(empty? body)
+                      nil
+                      (c-do ~@body)))}))
 
 (defmacro c-defn [name args & body]
   {:pre [(even? (count args))]}
@@ -52,9 +52,13 @@
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
-         (exp/->Call (exp/->Global (str nsname# "/" ~(clojure.core/name name))
+         (exp/->Call (exp/->Global (if ~(:exact (meta name))
+                                     ~(clojure.core/name name)
+                                     (str nsname# "/" ~(clojure.core/name name)))
                                    (c-fn-t ~(mapv first args) ~ret-type)) (vec args#)))
-           f# (c-fn (str nsname# "/" ~(clojure.core/name name))
+           f# (c-fn (if ~(:exact (meta name))
+                      ~(clojure.core/name name)
+                      (str nsname# "/" ~(clojure.core/name name)))
                    (c-fn-t ~(mapv first args) ~ret-type)
                    ~(mapv second args)
                    ~@body)]
@@ -97,6 +101,9 @@
 
 (defn c-aget [arr idx]
   (exp/->AGet arr (if (vector? idx) idx [idx])))
+
+(defn c-bitcast [a tp]
+  (exp/->BitCast a tp))
 
 (defmacro c-local [nm]
   `(exp/->Local ~(name nm)))

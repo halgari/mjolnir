@@ -1,14 +1,21 @@
 (ns examples.bf
   (:require [mjolnir.expressions :as exp]
             [mjolnir.constructors-init :as const]
-            [mjolnir.types :refer [Int32 ->PointerType valid?]])
+            [mjolnir.types :refer [Int8 Int32 ->PointerType valid?]])
   (:alias c mjolnir.constructors))
 
 
 (def cells (c/local "cells"))
 
-(c/defn ^:extern ^:exact getchar [-> Int32] 0)
-(c/defn ^:extern ^:exact putchar [Int32 chr -> Int32] 0)
+
+(def Cells (->PointerType Int8))
+(def RunCode-t (c/fn-t [] Int32))
+(def Zero8 (exp/->ConstInteger 0 Int8))
+(def One8 (exp/->ConstInteger 1 Int8))
+
+
+(c/defn ^:extern ^:exact getchar [-> Int32])
+(c/defn ^:extern ^:exact putchar [Int32 chr -> Int32])
 
 (defmulti compile-bf (fn [ip code] (first code)))
 
@@ -38,7 +45,7 @@
   {:ip (c/let [ip in-ip]
               (c/aset cells
                       ip
-                      (c/iadd (c/aget cells ip) 1))
+                      (c/iadd (c/aget cells ip) One8))
               ip)
    :code (next code)})
 
@@ -47,14 +54,14 @@
   {:ip (c/let [ip in-ip]
               (c/aset cells
                       ip
-                      (c/isub (c/aget cells ip) 1))
+                      (c/isub (c/aget cells ip) One8))
               ip)
    :code (next code)})
 
 (defmethod compile-bf \.
   [in-ip code]
   {:ip (c/let [ip in-ip]
-              (putchar (c/aget cells ip))
+              (putchar (exp/->ZExt (c/aget cells ip) Int32))
               ip)
    :code (next code)})
 
@@ -62,7 +69,7 @@
 (defmethod compile-bf \,
   [in-ip code]
   {:ip (c/let [ip in-ip]
-        (c/aset cells ip (getchar))
+              (c/aset cells ip (exp/->Trunc (getchar) Int8))
         ip)
    :code (next code)})
 
@@ -79,37 +86,48 @@
 
 (defmethod compile-bf \[
   [ip code]
-  (let [{ret-code :code ret-ip :ip}
-        (compile-block (c/local "ip") (next code))]
-    {:ip (exp/->Loop [["ip" ip]]
-                     (c/if (c/is (c/aget cells (c/local "ip")) 0)
-                           (c/local "ip")
+  (let [ip_name (name (gensym "ip_"))
+        {ret-code :code ret-ip :ip}
+        (compile-block (exp/->Local ip_name) (next code))
+        ]
+    
+    {:ip (exp/->Loop [[ip_name ip]]
+                     (c/if (c/is (c/aget cells (exp/->Local ip_name)) Zero8)
+                           (exp/->Local ip_name)
                            (c/recur ret-ip -> Int32)))
      :code ret-code}))
 
-#_(def hello-world "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
-(def hello-world "+++>>>>++<<<--")
-
-(def Cells (->PointerType Int32))
-(def RunCode-t (c/fn-t [Cells] Int32)) 
+(def hello-world "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
+#_(def hello-world "[-]")
+#_(def hello-world "+++++++++++++++++++++++++++++++++>++[<.>-]")
+#_(def hello-world ".+[.+]")
 
 (defn -main []
-  (let [cfn (const/c-fn "run-code" RunCode-t [cells]
-                        (c/let [cells (c/malloc Int32 20000)]
-                          (exp/pdebug (loop [ip 0
-                                             code hello-world]
-                                        (let [{ip :ip code :code} (compile-bf ip code)]
-                                          #_(println "::::: " code)
-                                          (if (next code)
-                                            (recur ip code)
-                                            ip))))))]
+  (let [cfn (const/c-fn "main" RunCode-t []
+                        (c/using [cells (c/bitcast (c/malloc Int8 30000) Cells)]
+                                 (c/dotimes [x 30000]
+                                            (c/aset cells x Zero8))
+                                 (loop [ip 0
+                                        code hello-world]
+                                   (let [{ip :ip code :code} (compile-bf ip code)]
+                                     #_(println "::::: " code)
+                                     (if code
+                                       (recur ip code)
+                                       ip)))))]
     
     
-    (valid? (exp/pdebug (c/module ['examples.bf]
+    #_(valid? (exp/pdebug (c/module ['examples.bf]
                                   cfn)))
-    (Thread/sleep 1000)
-    (exp/build (c/module ['examples.bf]
-                         cfn))))
+    (let [opted (exp/optimize (exp/build (c/module ['examples.bf]
+                                                   cfn)))]
+      (Thread/sleep 500)
+      (-> (exp/compile-as-exe opted)
+          (exp/run-exe)
+          (pr-str)
+          println))
+    (println "Finished")
+    (shutdown-agents)
+    0))
 
 
 
