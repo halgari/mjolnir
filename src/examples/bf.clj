@@ -2,7 +2,9 @@
   (:require [mjolnir.expressions :as exp]
             [mjolnir.constructors-init :as const]
             [mjolnir.types :refer [Int8 Int32 ->PointerType valid?]]
-            [mjolnir.llvmc :as l])
+            [mjolnir.llvmc :as l]
+            [mjolnir.config :as config]
+            [mjolnir.targets.target :refer [emit-to-file]])
   (:alias c mjolnir.constructors))
 
 
@@ -116,8 +118,10 @@
   (println "Reading Code")
   (slurp "http://www.73b.org/programs/beer.b"))
 
-(defn -main [program & more]
-  (let [output-file (first more)
+(defn -main [& opts]
+  (println opts)
+  (let [
+        options (apply hash-map (map read-string opts))
         program-code (beer)
         _ (println "Building Expressions")
         cfn (const/c-fn "main" RunCode-t []
@@ -132,22 +136,20 @@
                                        (recur ip code)
                                        ip)))))]
     
-    
-    #_(valid? (exp/pdebug (c/module ['examples.bf]
-                                  cfn)))
-    (let [_ (println "Compiling")
-          built (exp/build (c/module ['examples.bf] cfn))
-          _ (println "Optimizing")
-          opted (exp/optimize built)
-          _ (println "Linking")
-          compiled (time (l/emit-to-file opted
-                                             output-file))]
-      (when-not output-file
-        (println "Running")
-        (time (-> compiled
-                  (exp/run-exe)
-                  (pr-str)
-                  println))))
+    (let [target (config/default-target)]
+      (let [_ (println "Compiling")
+            built (exp/build (c/module ['examples.bf] cfn))
+            _ (println "Writing Object File")
+            compiled (time (emit-to-file target
+                                         built
+                                         options))]
+        1
+        #_(when-not output-file
+          (println "Running")
+          (time (-> compiled
+                    (exp/run-exe)
+                    (pr-str)
+                    println)))))
     (println "Finished")
     (shutdown-agents)
     0))

@@ -362,12 +362,19 @@
   (let [target (GetTarget module)]
     (println "--->" target (target-seq))
     (CreateTargetMachine (:target (second (next (target-seq))))
-                         "i686-apple-darwin"
+                         "i686-apple-darwin12.2.1"
                          "core-avx-i"
                          ""
                          LLVMCodeGenLevelDefault
                          LLVMRelocDefault
                          LLVMCodeModelDefault)))
+
+
+(defn temp-file [prefix ext]
+  (let [file (java.io.File/createTempFile prefix ext)]
+    (.deleteOnExit file)
+    (.getCanonicalPath file)))
+
 
 (defn emit-to-file [module filename]
   (let [err (new-pointer)
