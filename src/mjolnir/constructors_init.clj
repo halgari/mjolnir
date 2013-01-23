@@ -71,7 +71,6 @@
   (exp/->Is a b))
 
 (defn c-module [includes & body]
-  (println "g" @registered-globals)
   (doto (exp/->Module "main"
                       (-> (reduce (fn [a x]
                                     (if (namespace x)

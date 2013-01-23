@@ -1,7 +1,8 @@
 (ns examples.bf
   (:require [mjolnir.expressions :as exp]
             [mjolnir.constructors-init :as const]
-            [mjolnir.types :refer [Int8 Int32 ->PointerType valid?]])
+            [mjolnir.types :refer [Int8 Int32 ->PointerType valid?]]
+            [mjolnir.llvmc :as l])
   (:alias c mjolnir.constructors))
 
 
@@ -29,6 +30,11 @@
       (let [c (compile-bf ip code)]
         (recur (:ip c)
                (:code c))))))
+
+(defmethod compile-bf :default
+  [ip code]
+  {:ip ip
+   :code (next code)})
 
 (defmethod compile-bf \>
   [ip code]
@@ -97,18 +103,29 @@
                            (c/recur ret-ip -> Int32)))
      :code ret-code}))
 
-(def hello-world "++++++++++[>+++++++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
+(def hello-world "++++++++++[>+++++jhgj++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
 #_(def hello-world "[-]")
 #_(def hello-world "+++++++++++++++++++++++++++++++++>++[<.>-]")
 #_(def hello-world ".+[.+]")
 
-(defn -main []
-  (let [cfn (const/c-fn "main" RunCode-t []
+(defn mandelbrot []
+  (println "Reading Code")
+  (slurp "http://bfj.googlecode.com/svn-history/r3/trunk/bfj/bf/mandelbrot.b"))
+
+(defn beer []
+  (println "Reading Code")
+  (slurp "http://www.73b.org/programs/beer.b"))
+
+(defn -main [program & more]
+  (let [output-file (first more)
+        program-code (beer)
+        _ (println "Building Expressions")
+        cfn (const/c-fn "main" RunCode-t []
                         (c/using [cells (c/bitcast (c/malloc Int8 30000) Cells)]
                                  (c/dotimes [x 30000]
                                             (c/aset cells x Zero8))
                                  (loop [ip 0
-                                        code hello-world]
+                                        code program-code]
                                    (let [{ip :ip code :code} (compile-bf ip code)]
                                      #_(println "::::: " code)
                                      (if code
@@ -118,13 +135,19 @@
     
     #_(valid? (exp/pdebug (c/module ['examples.bf]
                                   cfn)))
-    (let [opted (exp/optimize (exp/build (c/module ['examples.bf]
-                                                   cfn)))]
-      (Thread/sleep 500)
-      (-> (exp/compile-as-exe opted)
-          (exp/run-exe)
-          (pr-str)
-          println))
+    (let [_ (println "Compiling")
+          built (exp/build (c/module ['examples.bf] cfn))
+          _ (println "Optimizing")
+          opted (exp/optimize built)
+          _ (println "Linking")
+          compiled (time (l/emit-to-file opted
+                                             output-file))]
+      (when-not output-file
+        (println "Running")
+        (time (-> compiled
+                  (exp/run-exe)
+                  (pr-str)
+                  println))))
     (println "Finished")
     (shutdown-agents)
     0))

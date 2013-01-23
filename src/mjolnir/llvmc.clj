@@ -271,12 +271,25 @@
    LLVMLinkerPrivateWeakDefAutoLinkage]) ; Like LinkerPrivateWeak, but possibly hidden. 
 
 
+(defnative Integer LLVMInitializeCppBackendTargetInfo)
+(defnative Integer LLVMInitializeCppBackendTarget)
+(defnative Integer LLVMInitializeCppBackendTargetMC)
+(defnative Integer LLVMInitializeX86AsmPrinter)
+(defnative Integer LLVMInitializeX86AsmParser)
+
 (defn init-target []
   (LinkInJIT)
   (LinkInInterpreter)
   (InitializeX86TargetInfo)
   (InitializeX86Target)
-  (InitializeX86TargetMC))
+  (InitializeX86TargetMC)
+  (InitializeX86AsmPrinter)
+  (InitializeX86AsmParser)
+  (InitializeCppBackendTargetInfo)
+  (InitializeCppBackendTarget)
+  (InitializeCppBackendTargetMC))
+
+(init-target)
 
 (def CCallConv 0)
 (def FastCallConv 8)
@@ -298,3 +311,70 @@
 
 (def kw->linkage
   {:extern LLVMExternalLinkage})
+
+
+
+
+
+
+
+(defnative Pointer LLVMGetFirstTarget)
+(defnative Pointer LLVMGetNextTarget)
+(defnative String LLVMGetTargetName)
+(defnative String LLVMGetTargetDescription)
+(defnative Boolean LLVMTargetHasJIT)
+(defnative Boolean LLVMTargetHasTargetMachine)
+(defnative Boolean LLVMTargetHasAsmBackend)
+(defnative String LLVMGetTarget)
+(defnative Pointer LLVMCreateTargetMachine)
+(defnative Boolean LLVMTargetMachineEmitToFile)
+(defnative Pointer LLVMGetTargetMachineData)
+(defnative Pointer LLVMSetDataLayout)
+(defnative Integer LLVMSetTarget)
+(defnative Pointer LLVMCreateTargetData)
+(defnative String LLVMGetTargetMachineTriple)
+
+
+(defn target-info [t]
+  {:target t
+   :name (GetTargetName t)
+   :desc (GetTargetDescription t)
+   :jit? (TargetHasJIT t)
+   :machine? (TargetHasTargetMachine t)
+   :asm? (TargetHasAsmBackend t)})
+
+(defn target-seq
+  ([]
+     (let [ft (GetFirstTarget)]
+       (when ft
+         (cons (target-info ft)
+               (lazy-seq
+                (target-seq ft))))))
+  ([t]
+     (let [nt (GetNextTarget t)]
+       (when nt
+         (cons (target-info nt)
+               (lazy-seq
+                (target-seq nt)))))))
+
+
+(defn make-target-machine [module]
+  (let [target (GetTarget module)]
+    (println "--->" target (target-seq))
+    (CreateTargetMachine (:target (second (next (target-seq))))
+                         "i686-apple-darwin"
+                         "core-avx-i"
+                         ""
+                         LLVMCodeGenLevelDefault
+                         LLVMRelocDefault
+                         LLVMCodeModelDefault)))
+
+(defn emit-to-file [module filename]
+  (let [err (new-pointer)
+        tm (make-target-machine module)]
+    (println (GetTargetMachineTriple tm))
+    (SetDataLayout module "x86_64-apple-darwin")
+    (when (TargetMachineEmitToFile tm module filename LLVMAssemblyFile err)
+      (assert false (.getString (value-at err) 0)))
+    (DisposeMessage (value-at err))
+    ))

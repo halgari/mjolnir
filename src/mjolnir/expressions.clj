@@ -635,7 +635,7 @@
     (llvm/AddDefaultPasses pass)
     (llvm/RunPassManager pass module)
     (llvm/DisposePassManager pass)
-    (llvm/DumpModule module)
+    #_(llvm/DumpModule module)
     module))
 
 
@@ -680,11 +680,14 @@
 
 
 
-(defn compile-as-exe [mod]
+(defn compile-as-exe [mod opts]
   (let [ofile (write-object-file mod "x86-64")
-        exe-file (temp-file "exe_gen" "out")
+        exe-file (or (:out opts) (temp-file "exe_gen" "out"))
         out (link-exe ofile exe-file)]
     exe-file))
 
 (defn run-exe [file & args]
      (apply shell/sh file args))
+
+;;;;;;;;;; Target Machine ;;;;;;;;;;;;;;
+
