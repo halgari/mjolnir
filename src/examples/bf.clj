@@ -105,19 +105,6 @@
                            (c/recur ret-ip -> Int32)))
      :code ret-code}))
 
-(def hello-world "++++++++++[>+++++jhgj++>++++++++++>+++>+<<<<-]>++.>+.+++++++..+++.>++.<<+++++++++++++++.>.+++.------.--------.>+.>.")
-#_(def hello-world "[-]")
-#_(def hello-world "+++++++++++++++++++++++++++++++++>++[<.>-]")
-#_(def hello-world ".+[.+]")
-
-(defn mandelbrot []
-  (println "Reading Code")
-  (slurp "http://bfj.googlecode.com/svn-history/r3/trunk/bfj/bf/mandelbrot.b"))
-
-(defn beer []
-  (println "Reading Code")
-  (slurp "http://www.73b.org/programs/beer.b"))
-
 (defn -main [program & opts]
   (println opts)
   (let [options (apply hash-map (map read-string opts))
