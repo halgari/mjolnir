@@ -170,14 +170,20 @@
 (defnative Integer LLVMAddPromoteMemoryToRegisterPass)
 (defnative Integer LLVMAddGVNPass)
 (defnative Integer LLVMAddCFGSimplificationPass)
+(defnative Integer LLVMAddBBVectorizePass)
+(defnative Integer LLVMAddLoopVectorizePass)
+(defnative Integer LLVMAddLoopUnrollPass)
 
 (defn AddDefaultPasses [pm]
   (doto pm
+    #_AddLoopUnrollPass
     AddConstantPropagationPass
     AddInstructionCombiningPass
     AddPromoteMemoryToRegisterPass
     AddGVNPass
-    AddCFGSimplificationPass))
+    AddCFGSimplificationPass
+    AddBBVectorizePass
+    #_AddLoopVectorizePass))
 
 
 (def ^:dynamic *module* (ModuleCreateWithName "tmp"))

@@ -19,14 +19,16 @@
 
 
 (def code-gen-levels
-  {:none llvm/LLVMCodeGenLevelNone})
+  {:none llvm/LLVMCodeGenLevelNone
+   :aggressive llvm/LLVMCodeGenLevelAggressive})
 
 (def reloc-modes {})
 
 (def code-models {})
 
 (def output-types
-  {:asm llvm/LLVMAssemblyFile})
+  {:asm llvm/LLVMAssemblyFile
+   :obj llvm/LLVMObjectFile})
 
 
 

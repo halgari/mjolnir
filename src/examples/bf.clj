@@ -118,11 +118,10 @@
   (println "Reading Code")
   (slurp "http://www.73b.org/programs/beer.b"))
 
-(defn -main [& opts]
+(defn -main [program & opts]
   (println opts)
-  (let [
-        options (apply hash-map (map read-string opts))
-        program-code (beer)
+  (let [options (apply hash-map (map read-string opts))
+        program-code (slurp program)
         _ (println "Building Expressions")
         cfn (const/c-fn "main" RunCode-t []
                         (c/using [cells (c/bitcast (c/malloc Int8 30000) Cells)]
@@ -139,9 +138,10 @@
     (let [target (config/default-target)]
       (let [_ (println "Compiling")
             built (exp/build (c/module ['examples.bf] cfn))
+            optimized (exp/optimize built)
             _ (println "Writing Object File")
             compiled (time (emit-to-file target
-                                         built
+                                         optimized
                                          options))]
         1
         #_(when-not output-file
