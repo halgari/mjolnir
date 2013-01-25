@@ -16,6 +16,17 @@
 (defn c-isub [a b]
   (exp/->ISub a b))
 
+(defn c-* [& exprs]
+  (exp/->*Op exprs))
+
+(defn c-+ [& exprs]
+  (exp/->+Op exprs))
+
+(defn c-and [& exprs]
+  (reduce exp/->And
+          (first exprs)
+          (next exprs)))
+
 #_(defn c-module
   [& body]
   (exp/->Module (name (gensym "module_")) body))
@@ -67,8 +78,27 @@
 
 (defn c-or [a b]
   (exp/->Or a b))
+
 (defn c-is [a b]
-  (exp/->Is a b))
+  (exp/->Cmp := a b))
+
+(defn c-< [a b]
+  (exp/->Cmp :< a b))
+
+(defn c-> [a b]
+  (exp/->Cmp :> a b))
+
+(defn c-<= [a b]
+  (exp/->Cmp :<= a b))
+
+(defn c->= [a b]
+  (exp/->Cmp :>= a b))
+
+(defn c-dec [a]
+  (c-+ a -1))
+
+(defn c-inc [a]
+  (c-+ a 1))
 
 (defn c-module [includes & body]
   (doto (exp/->Module "main"

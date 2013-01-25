@@ -92,7 +92,47 @@
   (return-type [this]
     (return-type a))
   (build [this]
-    (llvm/BuildAdd *builder* (build a) (build b))))
+    (llvm/BuildAdd *builder* (build a) (build b) (genname "add_"))))
+
+
+(defrecord IMul [a b]
+  Validatable
+  (validate [this]
+    (validate-all a b)
+    (assure-same-type a b))
+  Expression
+  (return-type [this]
+    (return-type a))
+  (build [this]
+    (llvm/BuildMul *builder* (build a) (build b) (genname "imul_"))))
+
+(defrecord FMul [a b]
+  Validatable
+  (validate [this]
+    (validate-all a b)
+    (assure-same-type a b))
+  Expression
+  (return-type [this]
+    (return-type a))
+  (build [this]
+    (llvm/BuildFMul *builder* (build a) (build b) (genname "fmul_"))))
+
+
+(defrecord And [a b]
+  Validatable
+  (validate [this]
+    (valid? a)
+    (valid? b)
+    (assure-same-type (return-type a) Int1)
+    (assure-same-type (return-type b) Int1))
+  Expression
+  (return-type [this]
+    Int1)
+  (build [this]
+    (llvm/BuildAnd *builder*
+                   (build a)
+                   (build b)
+                   (genname "and_"))))
 
 (defrecord Or [a b]
   Validatable
@@ -110,9 +150,18 @@
                   (build b)
                   (genname "or_"))))
 
-(defrecord Is [a b]
+(def cmp-maps
+  {:= llvm/LLVMIntEQ
+   :!= llvm/LLVMIntNE
+   :> llvm/LLVMIntSGT
+   :< llvm/LLVMIntSLT
+   :<= llvm/LLVMIntSLE
+   :>= llvm/LLVMIntSGE})
+
+(defrecord Cmp [pred a b]
   Validatable
   (validate [this]
+    (assure (pred cmp-maps))
     (valid? a)
     (valid? b)
     (Expression? a)
@@ -122,7 +171,7 @@
   (return-type [this]
     Int1)
   (build [this]
-    (llvm/BuildICmp *builder* llvm/LLVMIntEQ (build a) (build b) (genname "is_"))))
+    (llvm/BuildICmp *builder* (pred cmp-maps) (build a) (build b) (genname "is_"))))
 
 (defrecord Not [a]
   Validatable
@@ -232,7 +281,8 @@
   (return-type [this]
     (assert false "Can't get the return type of a module"))
   (build [this]
-    (let [error (llvm/new-pointer)
+    (let [_ (valid? this)
+          error (llvm/new-pointer)
           module (llvm/ModuleCreateWithName name)]
       (binding [*module* module
                 *builder* (llvm/CreateBuilder)]
@@ -323,6 +373,19 @@
   (build [this]
     (llvm/BuildAdd *builder* (build a) (build b) (genname "iadd_"))))
 
+(defrecord FAdd [a b]
+  Validatable
+  (validate [this]
+    (valid? a)
+    (valid? b)
+    (assure-same-type (return-type a)
+                      (return-type b)))
+  Expression
+  (return-type [this]
+    (return-type a))
+  (build [this]
+    (llvm/BuildFAdd *builder* (build a) (build b) (genname "iadd_"))))
+
 (defrecord ISub [a b]
   Validatable
   (validate [this]
@@ -347,6 +410,47 @@
     (let [a (*llvm-locals* nm)]
       (assert a (str "Can't find local " nm))
       a)))
+
+
+(defrecord +Op [exprs]
+  Validatable
+  (validate [this]
+    (doseq [exp exprs]
+      (assure (valid? exp)))
+    (assert (apply = (map return-type exprs))
+            "Every Expression in a + must return the same type"))
+  Expression
+  (return-type [this]
+    (return-type (first exprs)))
+  (build [this]
+    (-> (reduce (fn [a x]
+                  (cond
+                    (integer-type? (return-type a)) (->IAdd a x)
+                    (float-type? (return-type a)) (->FAdd a x)))
+                (first exprs)
+                (next exprs))
+        build)))
+
+
+(defrecord *Op [exprs]
+  Validatable
+  (validate [this]
+    (doseq [exp exprs]
+      (assure (valid? exp)))
+    (assert (apply = (map return-type exprs))
+            "Every Expression in a * must return the same type"))
+  Expression
+  (return-type [this]
+    (return-type (first exprs)))
+  (build [this]
+    (-> (reduce (fn [a x]
+                  (cond
+                    (integer-type? (return-type a)) (->IMul a x)
+                    (float-type? (return-type a)) (->FMul a x)))
+                (first exprs)
+                (next exprs))
+        build)))
+
 
 (defrecord Loop [itms body]
   Validatable
@@ -377,13 +481,15 @@
             endblk (llvm/AppendBasicBlock *llvm-fn* (genname "loopexit_"))
             _ (llvm/BuildBr *builder* loopblk)
             _ (llvm/PositionBuilderAtEnd *builder* loopblk)
+            fromblk @*block*
+            _ (reset! *block* loopblk)
             phis (doall (map (fn [[built exp]]
                                (let [phi (llvm/BuildPhi *builder*
                                                     (llvm-type (return-type exp))
                                                     (genname "loopval_"))]
                                  (llvm/AddIncoming phi
                                                    (into-array Pointer [built])
-                                                   (into-array Pointer [@*block*])
+                                                   (into-array Pointer [fromblk])
                                                    1)
                                  phi))
                              (map vector inits (map second itms))))]
@@ -432,6 +538,18 @@
     (->ArrayType type cnt))
   (build [this]
     (llvm/BuildMalloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
+
+#_(defrecord Alloc [type cnt]
+  Validatable
+  (validate [this]
+    (assure (type? type))
+    (assure (integer? cnt)))
+  Expression
+  (return-type [this]
+    (->ArrayType type cnt))
+  (build [this]
+    (llvm/BuildAlloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
+
 
 (defrecord ASet [arr idx val]
   Validatable
@@ -638,7 +756,8 @@
     #_(llvm/DumpModule module)
     module))
 
-
+(defn dump [module]
+  (llvm/DumpModule module))
 
 (defn write-object-file [module march] 
   (let [file (dump-module-to-temp-file module)

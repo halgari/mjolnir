@@ -43,6 +43,13 @@
   (c/using [data (c/malloc Int32 5)]
            (c/aget (c/aset data 0 num) 0)))
 
+;; Tests to see if we can nex
+(c/defn nested-dotimes [-> Int32]
+  (c/dotimes [x 100]
+             (c/dotimes [y 200]
+                        (c/+ x y)
+      #_(c/dotimes [z 300]
+        (c/+ x y z)))))
 
 
 (describe "constructors"
@@ -82,7 +89,7 @@
                              e (engine mb)
                              f (get-fn e mb "mjolnir.constructors-spec/aset-aget")]
                          (f 42))))
-          (it "can run cnt function"
+          #_(it "can run cnt function"
               (let [m (c/module ['mjolnir.constructors-spec/cnt])
                     _ (pdebug m)
                     _ (valid? m)
@@ -92,5 +99,10 @@
                     ]
                 #_(write-object-file mb "x86-64")
                 (time (f 32))
-                (println e f mb))))
+                (println e f mb)))
+          (it "can nest dotimes"
+              (let [m (c/module ['mjolnir.constructors-spec/nested-dotimes])
+                    _ (valid? m)
+                    mb (build m)
+                    d (dump mb)])))
 

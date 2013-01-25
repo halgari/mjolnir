@@ -50,6 +50,9 @@
   (llvm-type [this]
     (llvm/IntType width)))
 
+(defn integer-type? [tp]
+  (instance? IntegerType tp))
+
 (defrecord FloatType [width]
   Validatable
   (validate [this]
@@ -59,9 +62,13 @@
     (case width
       32 (llvm/FloatType))))
 
+(defn float-type? [tp]
+  (instance? FloatType tp))
+
 (defrecord PointerType [etype]
   Validatable
   (validate [this]
+    
     (assure-type etype))
   Type
   (llvm-type [this]

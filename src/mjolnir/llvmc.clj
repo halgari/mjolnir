@@ -154,6 +154,9 @@
 (defnative Integer LLVMGetIntTypeWidth)
 (defnative Pointer LLVMBuildStructGEP)
 (defnative Pointer LLVMBuildAdd)
+(defnative Pointer LLVMBuildFAdd)
+(defnative Pointer LLVMBuildMul)
+(defnative Pointer LLVMBuildFMul)
 (defnative Pointer LLVMBuildSub)
 (defnative Pointer LLVMBuildShl)
 (defnative Pointer LLVMBuildLShr)
@@ -173,9 +176,11 @@
 (defnative Integer LLVMAddBBVectorizePass)
 (defnative Integer LLVMAddLoopVectorizePass)
 (defnative Integer LLVMAddLoopUnrollPass)
+(defnative Pointer LLVMAddFunctionInliningPass)
 
 (defn AddDefaultPasses [pm]
   (doto pm
+    AddFunctionInliningPass
     #_AddLoopUnrollPass
     AddConstantPropagationPass
     AddInstructionCombiningPass
@@ -201,18 +206,21 @@
 
 (init-target)
 
-(def LLVMIntEQ 32)
+
 
 (defmacro defenum
-  [nm defs]
-  (list* 'do
-        `(def ~nm {:idx ~(zipmap (range)
-                                   (map (comp keyword name) defs))
-                     :defs ~(zipmap (map (comp keyword name) defs)
-                                    (range))})
-        (map-indexed (fn [idx d]
-                       `(def ~d ~idx))
-                     defs)))
+  ([nm defs]
+     `(defenum ~nm 0 ~defs))
+  ([nm init defs]
+     (list* 'do
+            `(def ~nm {:idx ~(zipmap (range)
+                                     (map (comp keyword name) defs))
+                       :defs ~(zipmap (map (comp keyword name) defs)
+                                      (range init Integer/MAX_VALUE))})
+            (map (fn [d idx]
+                   `(def ~d ~idx))
+                 defs
+                 (range init Integer/MAX_VALUE)))))
 
 (defenum LLVMTypeKind
   [LLVMVoidTypeKind
@@ -277,6 +285,21 @@
    LLVMLinkerPrivateWeakDefAutoLinkage]) ; Like LinkerPrivateWeak, but possibly hidden. 
 
 
+(def LLVMIntEQ 32)
+
+(defenum LLVMIntPredicate
+  32
+  [LLVMIntEQ
+   LLVMIntNE
+   LLVMIntUGT
+   LLVMIntUGE 
+   LLVMIntULT
+   LLVMIntULE
+   LLVMIntSGT
+   LLVMIntSGE 
+   LLVMIntSLT
+   LLVMIntSLE])
+
 (defnative Integer LLVMInitializeCppBackendTargetInfo)
 (defnative Integer LLVMInitializeCppBackendTarget)
 (defnative Integer LLVMInitializeCppBackendTargetMC)
@@ -339,6 +362,7 @@
 (defnative Integer LLVMSetTarget)
 (defnative Pointer LLVMCreateTargetData)
 (defnative String LLVMGetTargetMachineTriple)
+
 
 
 (defn target-info [t]
