@@ -1,9 +1,12 @@
 (ns mjolnir.targets.darwin
-  (:require [mjolnir.targets.target :as target]
+  (:require
+   [mjolnir.expressions :as expr]
+   [mjolnir.targets.target :as target]
             [clojure.java.shell :as shell]
             [mjolnir.types :as types]
             [mjolnir.targets.x86-cpus :as x86-cpus]
-            [mjolnir.llvmc :as llvm]))
+            [mjolnir.llvmc :as llvm])
+  (:import [com.sun.jna Native Pointer Memory Function]))
 
 
 (defrecord DarwinTarget [march vendor os llvm-target]
@@ -25,7 +28,10 @@
     (let [tm (target/create-target-machine this opts)
           err (llvm/new-pointer)
           file (or (:filename opts)
-                   (llvm/temp-file "darwin_output" ""))]
+                   (llvm/temp-file "darwin_output" (case (:output-type opts)
+                                                     :asm ".s"
+                                                     :obj ".o"
+                                                     ".o")))]
       (when (llvm/TargetMachineEmitToFile tm
                                           module
                                           (name file)
@@ -34,7 +40,32 @@
                                           err)
         (assert false (.getString (llvm/value-at err) 0)))
       (llvm/DisposeMessage (llvm/value-at err))
-      file)))
+      file))
+  (as-dll [this module opts]
+    (let [f (target/emit-to-file this module (assoc (dissoc opts :filename) :output-type :asm))
+          opts (merge {:filename (llvm/temp-file "darwin_dll" ".dylib")}
+                      opts)
+          cmds (list* "cc" "-shared" f "-o"
+                      (:filename opts)
+                      (:link-ops opts))]
+      (println cmds)
+      (Thread/sleep 1000)
+      (when (:verbose opts)
+        (println "Linking: " cmds))
+      (apply shell/sh cmds)
+      (reify clojure.lang.ILookup
+        (valAt [this key]
+          (.valAt this key nil))
+        (valAt [this key not-found]
+          (let [nm (-> (key) :fn)
+                nfn (Function/getFunction (:filename opts)
+                                          (:name nm))
+                mj-ret (:ret-type (expr/return-type nm))
+                rettype (cond
+                         (types/integer-type? mj-ret) Integer
+                         (types/pointer-type? mj-ret) Pointer)]
+            (fn [& args]
+              (.invoke nfn rettype (to-array args)))))))))
 
 (defn get-march []
   (System/getProperty "os.arch"))

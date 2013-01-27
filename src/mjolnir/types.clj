@@ -77,6 +77,24 @@
   (etype [this]
     (:etype this)))
 
+(defn pointer-type? [tp]
+  (instance? PointerType tp))
+
+(defrecord VectorType [etype cnt]
+  Validatable
+  (validate [this]
+    (assure-type etype)
+    (assure (integer? cnt)))
+  Type
+  (llvm-type [this]
+    (llvm/VectorType (llvm-type etype) cnt))
+  ElementPointer
+  (etype [this]
+    (:etype this)))
+
+(defn vector-type? [tp]
+  (instance? VectorType tp))
+
 (defrecord ArrayType [etype cnt]
   Validatable
   (validate [this]
@@ -115,4 +133,7 @@
 (def I8* (->PointerType (->IntegerType 8)))
 
 (def Float32 (->FloatType 32))
+(def Float32x4 (->VectorType Float32 4))
+
+
 

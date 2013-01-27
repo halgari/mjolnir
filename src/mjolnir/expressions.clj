@@ -49,6 +49,17 @@
   (build [this]
     (llvm/ConstInt (llvm-type type) value true)))
 
+(defrecord ConstVector [vals]
+  Validatable
+  (validate [this]
+    )
+  Expression
+  (return-type [this]
+    (->VectorType (return-type (first vals)) (count vals)))
+  (build [this]
+    (llvm/ConstVector (into-array Pointer
+                                  (map build vals))
+                      (count vals))))
 
 (defrecord BitCast [a tp]
   Validatable
@@ -426,7 +437,8 @@
     (-> (reduce (fn [a x]
                   (cond
                     (integer-type? (return-type a)) (->IAdd a x)
-                    (float-type? (return-type a)) (->FAdd a x)))
+                    (float-type? (return-type a)) (->FAdd a x)
+                    (vector-type? (return-type a)) (->FAdd a x)))
                 (first exprs)
                 (next exprs))
         build)))
@@ -446,7 +458,8 @@
     (-> (reduce (fn [a x]
                   (cond
                     (integer-type? (return-type a)) (->IMul a x)
-                    (float-type? (return-type a)) (->FMul a x)))
+                    (float-type? (return-type a)) (->FMul a x)
+                    (vector-type? (return-type a)) (->FMul a x)))
                 (first exprs)
                 (next exprs))
         build)))

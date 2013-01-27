@@ -1,9 +1,9 @@
 (ns examples.vectors
   (:require [mjolnir.constructors-init :as const]
-            [mjolnir.types :as types :refer [I8* Int32 Float32]]
-            [mjolnir.expressions :refer [build pdebug optimize dump]]
+            [mjolnir.types :as types :refer [I8* Int32 Float32 Float32x4]]
+            [mjolnir.expressions :refer [build pdebug optimize dump ->ConstVector]]
             [mjolnir.config :as config]
-            [mjolnir.targets.target :refer [emit-to-file]])
+            [mjolnir.targets.target :refer [emit-to-file as-dll]])
   (:alias c mjolnir.constructors)
   (:import [javax.imageio ImageIO]
            [java.io File]
@@ -66,6 +66,7 @@
 
 (def I8** (types/->PointerType I8*))
 (def Float32* (types/->PointerType Float32))
+(def Float32x4* (types/->PointerType Float32x4))
 
 (c/defn ^:extern ^:exact posix_memalign [I8** ptr Int32 alignment Int32 size -> Int32])
 
@@ -78,6 +79,9 @@
 
 (c/defn mj-get-offset [Int32 size-x Int32 x Int32 y Int32 el -> Int32]
   (-> y (c/* size-x) (c/+ (c/* 4 x) el)))
+
+(c/defn mjv-get-offset [Int32 size-x Int32 x Int32 y -> Int32]
+  (c/+ (c/* size-x y) x))
 
 #_(c/defn ^:extern mj-set-pixel [I8* img
                              Int32 width
@@ -113,6 +117,9 @@
                 (mj-get-offset height x y el))
         (float 0.0)))
 
+(def v1 (->ConstVector [0.1 0.1 0.1 0.1]))
+(def v2 (->ConstVector [0.2 0.2 0.2 0.2]))
+
 (c/defn mj-get-smooth-pixel [Float32* img
                           Int32 size-x
                           Int32 size-y
@@ -133,6 +140,24 @@
            (c/* 0.1 (c/aget img (mj-get-offset size-x (c/inc x) (c/inc y) el))))
       (c/* (double 0.1))))
 
+(c/defn mjv-get-smooth-pixel [Float32x4* img
+                          Int32 size-x
+                          Int32 size-y
+                          Int32 x
+                          Int32 y
+                          -> Float32x4]
+  (c/+ (c/* v1 (c/aget img (mjv-get-offset size-x (c/dec x) (c/dec y))))
+          (c/* v1 (c/aget img (mjv-get-offset size-x x (c/dec y))))
+          (c/* v1 (c/aget img (mjv-get-offset size-x (c/inc x) (c/dec y))))
+
+          (c/* v1 (c/aget img (mjv-get-offset size-x (c/dec x) y)))
+          (c/* v2 (c/aget img (mjv-get-offset size-x x y)))
+          (c/* v1 (c/aget img (mjv-get-offset size-x (c/inc x) y)))
+          
+          (c/* v1 (c/aget img (mjv-get-offset size-x (c/dec x) (c/inc y))))
+          (c/* v1 (c/aget img (mjv-get-offset size-x x (c/inc y))))
+          (c/* v1 (c/aget img (mjv-get-offset size-x (c/inc x) (c/inc y))))))
+
 
 (c/defn mj-smooth-img [Float32* img Int32 size-y Int32 size-x -> Float32*]
   (c/let [out (c/bitcast (mj-create-buffer size-x size-y)
@@ -144,23 +169,42 @@
                                                (c/aset out (mj-get-offset size-x (c/inc x) (c/inc y) el))))))
          out))
 
+(c/defn mjv-smooth-img [Float32x4* img Int32 size-y Int32 size-x -> Float32x4*]
+  (c/let [out (c/bitcast (mj-create-buffer size-x size-y)
+                         Float32x4*)]
+         (c/dotimes [y (c/+ size-y -2)]
+                    (c/dotimes [x (c/+ size-x -2)]
+                               (->> (mjv-get-smooth-pixel img size-x size-y (c/inc x) (c/inc y))
+                                    (c/aset out (mjv-get-offset size-x (c/inc x) (c/inc y))))))
+         out))
+
+
+
+
 (defn mj-tests []
   (let [m (c/module ['examples.vectors])
         #_(pdebug m)
         _ (Thread/sleep 1000)
         built (build m)]
-    (dump built)
-    (dump (optimize built))
-    (let [target (config/default-target)]
-      (emit-to-file target (optimize built) {:filename "foo.s" :output-type :asm}))))
+    (let [target (config/default-target)
+          bf (emit-to-file target (optimize built) {:filename "foo.s" :output-type :asm})
+          dll (as-dll target
+                      (optimize built)
+                      {:verbose true})
+          create-buffer (get dll mj-create-buffer)
+          buf (create-buffer 3265 1952)
+          smooth (get dll mjv-smooth-img)]
+      (time (smooth buf 3264 1952))
+      (println "done"))))
 
 
 (defn -main []
   (mj-tests)
-  (let [width (.getWidth raw-img)
-        height (.getHeight raw-img)]
-    (time (smooth-img img height width)))
-  (println (count img)))
+  (comment
+    (let [width (.getWidth raw-img)
+          height (.getHeight raw-img)]
+      (time (smooth-img img height width)))
+    (println (count img))))
 
 (comment
   (def image-size 1024)

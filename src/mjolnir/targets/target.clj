@@ -10,7 +10,8 @@
 (defprotocol ITarget
   (pointer-type [this] "Get the system pointer mjolnir type")
   (create-target-machine [this opts] "Creates an llvm target machine from this target")
-  (emit-to-file [this module opts] "Writes the module to a file with the specified options"))
+  (emit-to-file [this module opts] "Writes the module to a file with the specified options")
+  (as-dll [this module opts] "Compiles the module as a shared library"))
 
 (defn find-llvm-target-by-name [name]
   (first (filter (comp (partial = name) :name)
