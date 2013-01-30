@@ -51,6 +51,30 @@
       #_(c/dotimes [z 300]
         (c/+ x y z)))))
 
+(c/defstruct parent-struct
+  :members [Int32 v1])
+
+(c/defstruct child-struct
+  :extends parent-struct
+  :members [Int32 v2])
+
+(c/defstruct grandchild-struct
+  :extends child-struct
+  :members [Int32 v3])
+
+;; Tests basic struct get-set
+(c/defn structs-test [Int32 num -> Int32]
+  (c/using [res (c/bitcast (c/malloc grandchild-struct 1)
+                           (->PointerType grandchild-struct))]
+           (c/set res :v2 num)
+           (-v2 res)))
+
+(c/def fourty-two 42 -> Int32)
+
+(c/def fourty-two-p fourty-two -> Int32*)
+
+(c/defn get-global [-> Int32]
+  (c/aget fourty-two-p 0))
 
 (describe "constructors"
           (it "can create basic functions"
@@ -104,5 +128,19 @@
               (let [m (c/module ['mjolnir.constructors-spec/nested-dotimes])
                     _ (valid? m)
                     mb (build m)
-                    d (dump mb)])))
+                    #_(dump mb)]))
+          (it "can create and access structs"
+              (let [m (c/module ['mjolnir.constructors-spec/structs-test])
+                    _ (valid? m)
+                    mb (build m)
+                    #_(dump mb)
+                    ]))
+          (it "can create and access globals"
+              (let [m (c/module ['mjolnir.constructors-spec/fourty-two
+                                 'mjolnir.constructors-spec/fourty-two-p
+                                 'mjolnir.constructors-spec/get-global])
+                    _ (valid? m)
+                    mb (build m)
+                    #_(dump mb)
+                    ])))
 

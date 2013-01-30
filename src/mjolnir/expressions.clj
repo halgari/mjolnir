@@ -1,6 +1,7 @@
 (ns mjolnir.expressions
   (:require [mjolnir.types :refer :all]
             [mjolnir.llvmc :as llvm]
+            [mjolnir.config :refer :all]
             [clojure.java.shell :as shell]
             [clojure.string :as string]
             [bbloom.fipp.edn :refer (pprint pretty pretty-map) :rename {pprint fipp}])
@@ -14,18 +15,6 @@
   (fipp x)
   (println "-------------")
   x)
-
-(def ^:dynamic *builder*)
-(def ^:dynamic *module*)
-(def ^:dynamic *fn*)
-(def ^:dynamic *llvm-fn*)
-(def ^:dynamic *locals* {})
-(def ^:dynamic *llvm-locals*)
-(def ^:dynamic *llvm-recur-point*)
-(def ^:dynamic *llvm-recur-phi*)
-(def ^:dynamic *llvm-recur-block*)
-(def ^:dynamic *block* (atom nil))
-(def ^:dynamic *recur-point*)
 
 (def genname (comp name gensym))
 
@@ -222,6 +211,21 @@
       arg-type)
     (build [this]
       (llvm/GetParam *llvm-fn* arg-idx)))
+
+
+(defrecord GetGlobal [name tp]
+  Validatable
+  (validate [this]
+    (assure (string? name))
+    (assure (type? tp)))
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (if (FunctionType? tp)
+      (llvm/GetNamedFunction *module* name)
+      (llvm/GetNamedGlobal *module* name))))
+
 
 
 
@@ -624,6 +628,80 @@
                       gep
                       (genname "load_")))))
 
+(defrecord Set [ptr member val]
+  Validatable
+  (validate [this]
+    (assure (valid? ptr))
+    (assure (keyword? member))
+    (assure (valid? val))
+    (assure (pointer-type? (return-type ptr)))
+    (let [etp (etype (return-type ptr))
+          mt (member-idx etp member)]
+      (assert (identity mt) (vector (flatten-struct (return-type ptr))
+                                    (return-type ptr)))
+      (assure-same-type (first (nth (flatten-struct etp) mt))
+                        (return-type val))))
+  
+  Expression
+  (return-type [this]
+    (etype (return-type ptr)))
+  (build [this]
+    (let [etp (etype (return-type ptr))
+          idx (member-idx etp
+                          member)
+          _ (assert idx "Idx error, did you validate first?")
+
+          cptr (build (->BitCast ptr (->PointerType etp)))
+          gep (llvm/BuildStructGEP *builder* cptr idx (genname "set_"))]
+      (llvm/BuildStore *builder* (build val) gep)
+      ptr)))
+
+
+(defrecord Get [ptr member]
+  Validatable
+  (validate [this]
+    (assure (valid? ptr))
+    (assure (keyword? member))
+    (assure (pointer-type? (return-type ptr)))
+    (assure (member-idx (etype (return-type ptr))
+                        member)))
+  Expression
+  (return-type [this]
+    (let [idx (member-idx (etype (return-type ptr))
+                          member)]
+      (-> ptr return-type etype flatten-struct (nth idx) first)))
+  (build [this]
+    (let [etp (etype (return-type ptr))
+          idx (member-idx etp
+                          member)
+          _ (assert idx "Idx error, did you validate first?")
+          cptr (build (->BitCast ptr (->PointerType etp)))
+          gep (llvm/BuildStructGEP *builder* cptr idx (genname "get_"))] 
+      (llvm/BuildLoad *builder* gep (genname "load_")))))
+
+(defrecord New [tp vals]
+  Validatable
+  (validate [this]
+    (assure (StructType? tp))
+    (assure (= (count (flatten-struct tp)) (count vals)))
+    (doall (map (fn [[tp name] o]
+                  (assure-same-type tp (return-type o)))
+                (flatten-struct tp)
+                vals)))
+  Expression
+  (return-type [this]
+    (->PointerType tp))
+  (build [this]
+    (let [malloc (llvm/BuildMalloc *builder* (llvm-type tp) (genname "new_"))
+          members (flatten-struct tp)]
+      (doseq [idx (range (count vals))]
+        (let [gep (llvm/BuildStructGEP *builder*
+                                       malloc
+                                       idx
+                                       (genname "gep_"))]
+          (llvm/BuildStore *builder* (build (nth vals idx)) gep)))
+      malloc)))
+
 (defrecord Recur [items type]
   Validatable
   (validate [this]
@@ -671,15 +749,23 @@
       (build exp))
     (build (last body))))
 
-(defrecord Global [name type]
+(defrecord Global [name val type]
   Validatable
   (validate [this]
-    (assure (string? name)))
+    (assure (string? name))
+    (assure (type? type)))
   Expression
   (return-type [this]
     type)
   (build [this]
-    (llvm/GetNamedFunction *module* name)))
+    (llvm/SetInitializer (llvm/GetNamedGlobal *module* name)
+                         (encode-const type val)))
+  GlobalExpression
+  (stub-global [this]
+    (println "stub global " name)
+    (llvm/AddGlobal *module*
+                    (llvm-type type)
+                    name)))
 
 (defn Module? [mod]
   (instance? Module mod))

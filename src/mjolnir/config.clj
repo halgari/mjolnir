@@ -1,8 +1,20 @@
 (ns mjolnir.config
   (:require [mjolnir.targets.target :as target]
-            [mjolnir.targets.darwin :as darwin]))
+            ))
 
 (def ^:dynamic *target*)
+(def ^:dynamic *builder*)
+(def ^:dynamic *module*)
+(def ^:dynamic *fn*)
+(def ^:dynamic *llvm-fn*)
+(def ^:dynamic *locals* {})
+(def ^:dynamic *llvm-locals*)
+(def ^:dynamic *llvm-recur-point*)
+(def ^:dynamic *llvm-recur-phi*)
+(def ^:dynamic *llvm-recur-block*)
+(def ^:dynamic *block* (atom nil))
+(def ^:dynamic *recur-point*)
+
 
 (defmacro with-target [[nm target] & body]
   `(binding [*target* ~target]
@@ -12,6 +24,8 @@
 (def default-target-fn (atom nil))
 
 (defn default-target []
-  (darwin/init-target (fn [d-fn]
-                        (reset! default-target-fn d-fn)))
-  (@default-target-fn))
+  (require 'mjolnir.targets.darwin)
+  (let [init (intern 'mjolnir.targets.darwin 'init-target)]
+    (init (fn [d-fn]
+                                          (reset! default-target-fn d-fn)))
+    (@default-target-fn)))

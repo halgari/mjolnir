@@ -193,7 +193,9 @@
                       {:verbose true})
           create-buffer (get dll mj-create-buffer)
           buf (create-buffer 3265 1952)
-          smooth (get dll mjv-smooth-img)]
+          smooth (get dll mj-smooth-img)]
+      (time (smooth buf 3264 1952))
+      (time (smooth buf 3264 1952))
       (time (smooth buf 3264 1952))
       (println "done"))))
 

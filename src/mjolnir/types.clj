@@ -1,5 +1,6 @@
 (ns mjolnir.types
-  (:require [mjolnir.llvmc :as llvm]))
+  (:require [mjolnir.llvmc :as llvm]
+            [mjolnir.config :refer :all]))
 
 (defmacro assure [pred]
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
@@ -30,6 +31,9 @@
 (defprotocol ElementPointer
   (etype [this]))
 
+(defprotocol ConstEncoder
+  (encode-const [this val] "Encodes the value as a const with this type"))
+
 (defn ElementPointer? [t]
   (extends? ElementPointer (type t)))
 
@@ -48,7 +52,10 @@
     (assure (integer? width)))
   Type
   (llvm-type [this]
-    (llvm/IntType width)))
+    (llvm/IntType width))
+  ConstEncoder
+  (encode-const [this val]
+    (llvm/ConstInt (llvm-type this) val true)))
 
 (defn integer-type? [tp]
   (instance? IntegerType tp))
@@ -60,7 +67,10 @@
   Type
   (llvm-type [this]
     (case width
-      32 (llvm/FloatType))))
+      32 (llvm/FloatType)))
+  ConstEncoder
+  (encode-const [this val]
+    (llvm/ConstReal (llvm-type this) val)))
 
 (defn float-type? [tp]
   (instance? FloatType tp))
@@ -75,7 +85,13 @@
     (llvm/PointerType (llvm-type etype) 0))
   ElementPointer
   (etype [this]
-    (:etype this)))
+    (:etype this))
+  ConstEncoder
+  (encode-const [this val]
+    (let [nm (:name val)
+          ng (llvm/GetNamedGlobal *module* nm)]
+      (assert ng (str "Could not find global: " nm))
+      ng)))
 
 (defn pointer-type? [tp]
   (instance? PointerType tp))
@@ -119,6 +135,43 @@
                        (count arg-types)
                        false)))
 
+
+(defn flatten-struct [tp]
+  (->> (take-while (complement nil?)
+                   (iterate :extends tp))
+       reverse
+       (mapcat :members)))
+
+(defn seq-idx [col ksel k]
+  (-> (zipmap (map ksel col)
+              (range))
+      (get k)))
+
+(defn member-idx [struct member]
+  (-> (flatten-struct struct)
+      (seq-idx second member)))
+
+
+
+(defrecord StructType [name extends members]
+  Validatable
+  (validate [this]
+    (when extends
+      (assure (instance? extends StructType)))
+    (doseq [[tp name] members]
+      (assure (keyword? name))
+      (assure (extends? tp Type))))
+  Type
+  (llvm-type [this]
+    (let [mems (flatten-struct this)]
+      (llvm/StructType (llvm/map-parr (comp llvm-type first)
+                                      mems)
+                       (count mems)
+                       true))))
+
+(defn StructType? [tp]
+  (instance? StructType tp))
+
 (defn FunctionType? [tp]
   (instance? FunctionType tp))
 
@@ -127,6 +180,7 @@
 
 ;; Common types
 (def Int32 (->IntegerType 32))
+(def Int32* (->PointerType (->IntegerType 32)))
 (def Int8 (->IntegerType 8))
 (def Int64 (->IntegerType 64))
 (def Int1 (->IntegerType 1))

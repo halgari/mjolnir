@@ -63,7 +63,7 @@
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
-         (exp/->Call (exp/->Global (if ~(:exact (meta name))
+         (exp/->Call (exp/->GetGlobal (if ~(:exact (meta name))
                                      ~(clojure.core/name name)
                                      (str nsname# "/" ~(clojure.core/name name)))
                                    (c-fn-t ~(mapv first args) ~ret-type)) (vec args#)))
@@ -173,10 +173,14 @@
            `(exp/->Do ~(vec body))
           (reverse (partition 2 bindings))))
 
-(defn c-malloc [type cnt]
-  (exp/->Malloc type cnt))
+(defn c-malloc
+  "Mallocs count number of items of type: type"
+  [type count]
+  (exp/->Malloc type count))
 
-(defn c-free [val]
+(defn c-free
+  "Constructs an expression that calls free on the given pointer"
+  [val]
   (exp/->Free val))
 
 (defmacro c-using [[sym resource] & body]
@@ -184,6 +188,63 @@
            ret# (c-do ~@body)]
           (c-free ~sym)
           ret#))
+
+
+(defn c-struct [name opts]
+  (tp/->StructType name (:extends opts) (:members opts)))
+
+(defn- make-getter [[tp nm]]
+  `(defn ~(symbol (str "-" (name nm)))
+     [x#]
+     (c-get x# ~(-> nm name keyword))))
+
+(defmacro c-defstruct [nm & opts]
+  (let [opts (apply hash-map opts)
+        extends (:extends opts)
+        members (:members opts)
+        parted (partition 2 members)]
+    `(do (def ~nm (c-struct ~(name nm)
+                            {:extends ~extends
+                             :members ~(vec (map
+                                             (fn [[tp nm]]
+                                               [tp (keyword (name nm))])
+                                             parted))}))
+         ~@(map make-getter
+                parted))))
+
+(defn c-set
+  "Creates an ->Set expression. ptr is a pointer to a struct, attr is the
+   keyword of the member to set and val is value to set the member to."
+  [ptr attr val]
+  (exp/->Set ptr attr val))
+
+(defn c-get
+  "Creates a ->Get expression. ptr is a pointer to a struct and attr is the
+   keyword of the member to access."
+  [ptr attr]
+  (exp/->Get ptr attr))
+
+(defn c-new
+  "Constructs a new struct (using malloc), and sets the first (count vals) values
+   to the values provide."
+  [tp & vals]
+  (exp/->New tp vals))
+
+(defn c-global [nm val tp]
+  (exp/->Global nm val tp))
+
+(defmacro c-def [nm val arrow tp]
+  (assert (= arrow '->) "must include a -> and a type")
+  `(let [nsname# (.getName ~'*ns*)]
+     (def ~nm (exp/->GetGlobal (str nsname# "/" ~(name nm))
+                               ~tp))
+     (register-global
+      nsname#
+      ~(name nm)
+      (c-global (str nsname# "/" ~(name nm))
+                ~val
+                ~tp))))
+
 
 ;; Black magic is here
 (let [ns (create-ns 'mjolnir.constructors)]
