@@ -5,7 +5,10 @@
   :dependencies [[org.clojure/clojure "1.5.0-RC2"]
                  [speclj "2.5.0"]
                  [net.java.dev.jna/jna "3.4.0"]
-                 [fipp "0.1.0-SNAPSHOT"]]
+                 [fipp "0.1.0-SNAPSHOT"]
+                 [criterium "0.3.1"]]
   :plugins [[speclj "2.5.0"]]
   :test-paths ["spec/"]
-  :dev-dependencies [[speclj-growl "1.0.1"]])
+  :profiles {:dev {:dependencies
+                   [[speclj-growl "1.0.1"]
+                    ]}})

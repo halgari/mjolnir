@@ -59,21 +59,25 @@
        args (remove ret-fn args)
        args-map (zipmap (map second args)
                         (range))
-        arg-types (mapv first args)]
+        arg-types (mapv first args)
+        local-name (clojure.core/name name)
+        extern-name (if (string? (:exact (meta name)))
+                      (:exact (meta name))
+                      (clojure.core/name name))]
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
          (exp/->Call (exp/->GetGlobal (if ~(:exact (meta name))
-                                     ~(clojure.core/name name)
+                                     ~extern-name
                                      (str nsname# "/" ~(clojure.core/name name)))
                                    (c-fn-t ~(mapv first args) ~ret-type)) (vec args#)))
            f# (c-fn (if ~(:exact (meta name))
-                      ~(clojure.core/name name)
+                      ~extern-name
                       (str nsname# "/" ~(clojure.core/name name)))
                    (c-fn-t ~(mapv first args) ~ret-type)
                    ~(mapv second args)
                    ~@body)]
-       (register-global nsname# ~(clojure.core/name name) f#)
+       (register-global nsname# ~extern-name f#)
        )))
 
 (defn c-or [a b]

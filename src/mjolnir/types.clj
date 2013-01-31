@@ -188,6 +188,7 @@
 
 (def Float32 (->FloatType 32))
 (def Float32x4 (->VectorType Float32 4))
+(def Float64 (->FloatType 64))
 
 
 

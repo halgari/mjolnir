@@ -1,5 +1,6 @@
 (ns examples.vectors
-  (:require [mjolnir.constructors-init :as const]
+  (:require [criterium.core :as crit]
+            [mjolnir.constructors-init :as const]
             [mjolnir.types :as types :refer [I8* Int32 Float32 Float32x4]]
             [mjolnir.expressions :refer [build pdebug optimize dump ->ConstVector]]
             [mjolnir.config :as config]
@@ -193,10 +194,14 @@
                       {:verbose true})
           create-buffer (get dll mj-create-buffer)
           buf (create-buffer 3265 1952)
-          smooth (get dll mj-smooth-img)]
-      (time (smooth buf 3264 1952))
-      (time (smooth buf 3264 1952))
-      (time (smooth buf 3264 1952))
+          smooth (get dll mj-smooth-img)
+          smoothv (get dll mjv-smooth-img)]
+      (println "Testing 'Normal' Mjolnir code")
+      (crit/quick-bench (smooth buf 3264 1952))
+      (println "done")
+      
+      (println "Testing SSE Enhanced Mjolnir code")
+      (crit/quick-bench (smoothv buf 3264 1952))
       (println "done"))))
 
 
