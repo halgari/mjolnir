@@ -16,6 +16,9 @@
 (defn c-isub [a b]
   (exp/->ISub a b))
 
+(defn c-fdiv [a b]
+  (exp/->FDiv a b))
+
 (defn c-* [& exprs]
   (exp/->*Op exprs))
 
@@ -64,6 +67,7 @@
         extern-name (if (string? (:exact (meta name)))
                       (:exact (meta name))
                       (clojure.core/name name))]
+    (assert ret-type "No return type given, did you forget the -> type?")
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
@@ -77,8 +81,12 @@
                    (c-fn-t ~(mapv first args) ~ret-type)
                    ~(mapv second args)
                    ~@body)]
-       (register-global nsname# ~extern-name f#)
+       (register-global nsname# ~local-name f#)
        )))
+
+(defmacro c-const [val arrow tp]
+  (assert (= arrow '->) "missing '-> before type")
+  `(exp/->Const ~tp ~val))
 
 (defn c-or [a b]
   (exp/->Or a b))
@@ -134,6 +142,12 @@
 
 (defn c-aget [arr idx]
   (exp/->AGet arr (if (vector? idx) idx [idx])))
+
+(defn c-eget [vec idx]
+  (exp/->EGet vec idx))
+
+(defn c-eset [vec idx val]
+  (exp/->ESet vec idx val))
 
 (defn c-bitcast [a tp]
   (exp/->BitCast a tp))

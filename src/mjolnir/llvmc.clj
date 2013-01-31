@@ -151,6 +151,7 @@
 (defnative Pointer LLVMInt8Type)
 (defnative Pointer LLVMInt1Type)
 (defnative Pointer LLVMFloatType)
+(defnative Pointer LLVMDoubleType)
 (defnative Pointer LLVMPointerType)
 (defnative Integer LLVMSetLinkage)
 (defnative Integer LLVMGetIntTypeWidth)
@@ -159,6 +160,7 @@
 (defnative Pointer LLVMBuildFAdd)
 (defnative Pointer LLVMBuildMul)
 (defnative Pointer LLVMBuildFMul)
+(defnative Pointer LLVMBuildFDiv)
 (defnative Pointer LLVMBuildSub)
 (defnative Pointer LLVMBuildShl)
 (defnative Pointer LLVMBuildLShr)
@@ -169,6 +171,8 @@
 (defnative Pointer LLVMBuildOr)
 (defnative Pointer LLVMBuildMalloc)
 
+(defnative Pointer LLVMBuildExtractElement)
+(defnative Pointer LLVMBuildInsertElement)
 
 (defnative Integer LLVMAddConstantPropagationPass)
 (defnative Integer LLVMAddInstructionCombiningPass)

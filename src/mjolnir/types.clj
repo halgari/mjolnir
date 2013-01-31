@@ -67,7 +67,8 @@
   Type
   (llvm-type [this]
     (case width
-      32 (llvm/FloatType)))
+      32 (llvm/FloatType)
+      64 (llvm/DoubleType)))
   ConstEncoder
   (encode-const [this val]
     (llvm/ConstReal (llvm-type this) val)))
@@ -96,17 +97,22 @@
 (defn pointer-type? [tp]
   (instance? PointerType tp))
 
-(defrecord VectorType [etype cnt]
+(defrecord VectorType [etype length]
   Validatable
   (validate [this]
     (assure-type etype)
-    (assure (integer? cnt)))
+    (assure (integer? length)))
   Type
   (llvm-type [this]
-    (llvm/VectorType (llvm-type etype) cnt))
+    (llvm/VectorType (llvm-type etype) length))
   ElementPointer
   (etype [this]
-    (:etype this)))
+    (:etype this))
+  ConstEncoder
+  (encode-const [this val]
+    (assert (= length (count val)) "Const must be the same length as the vector")
+    (llvm/ConstVector (llvm/map-parr (partial encode-const etype) val)
+                      (count val))))
 
 (defn vector-type? [tp]
   (instance? VectorType tp))
@@ -189,6 +195,9 @@
 (def Float32 (->FloatType 32))
 (def Float32x4 (->VectorType Float32 4))
 (def Float64 (->FloatType 64))
+(def Float64* (->PointerType Float64))
+(def Float64x4 (->VectorType Float64 4))
+(def Float64x4* (->PointerType Float64x4))
 
 
 

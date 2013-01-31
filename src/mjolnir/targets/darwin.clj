@@ -16,7 +16,7 @@
   (create-target-machine [this opts]
     (llvm/CreateTargetMachine (:target llvm-target)
                               (str march "-" vendor "-" os)
-                              (or (:cpu opts) "generic")
+                              (or (x86-cpus/cpus (:cpu opts)) "generic")
                               (or (:features opts) "")
                               (or (target/code-gen-levels (:code-gen-level opts))
                                   llvm/LLVMCodeGenLevelDefault)

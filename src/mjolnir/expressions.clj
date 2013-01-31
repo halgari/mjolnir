@@ -50,6 +50,16 @@
                                   (map build vals))
                       (count vals))))
 
+(defrecord Const [type val]
+  Validatable
+  (validate [this]
+    (assure (type? type)))
+  Expression
+  (return-type [this]
+    type)
+  (build [this]
+    (encode-const type val)))
+
 (defrecord BitCast [a tp]
   Validatable
   (validate [this]
@@ -116,6 +126,19 @@
     (return-type a))
   (build [this]
     (llvm/BuildFMul *builder* (build a) (build b) (genname "fmul_"))))
+
+(defrecord FDiv [a b]
+  Validatable
+  (validate [this]
+    (valid? a)
+    (valid? b)
+    (assure-same-type (return-type a)
+                      (return-type b)))
+  Expression
+  (return-type [this]
+    (return-type a))
+  (build [this]
+    (llvm/BuildFDiv *builder* (build a) (build b) (genname "fdiv_"))))
 
 
 (defrecord And [a b]
@@ -417,6 +440,7 @@
   Validatable
   (validate [this]
     (assure (string? nm))
+    (assert (*locals* nm) (str "Couldn't find " nm " in locals: " *locals*))
     (assure (type? (*locals* nm))))
   Expression
   (return-type [this]
@@ -679,6 +703,40 @@
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "get_"))] 
       (llvm/BuildLoad *builder* gep (genname "load_")))))
 
+
+(defrecord EGet [vec member]
+  Validatable
+  (validate [this]
+    (assure (vector-type? (return-type vec)))
+    (assure (integer? member))
+    (assure (< member (:length (return-type vec)))))
+  Expression
+  (return-type [this]
+    (etype (return-type vec)))
+  (build [this]
+    (llvm/BuildExtractElement *builder*
+                              (build vec)
+                              (encode-const Int32 member)
+                              (genname "eget_"))))
+
+(defrecord ESet [vec member val]
+  Validatable
+  (validate [this]
+    (assure (vector-type? (return-type vec)))
+    (assure (integer? member))
+    (assure-same-type (etype (return-type vec))
+                      (return-type val))
+    (assure (< member (:length (return-type vec)))))
+  Expression
+  (return-type [this]
+    (return-type vec))
+  (build [this]
+    (llvm/BuildInsertElement *builder*
+                             (build vec)
+                             (build val)
+                             (encode-const Int32 member)
+                             (genname "eget_"))))
+
 (defrecord New [tp vals]
   Validatable
   (validate [this]
@@ -781,11 +839,9 @@
     true)
   Expression
   (return-type [this]
-    Int32)
+    Int64)
   (build [this]
-    (llvm/ConstInt (llvm-type (return-type this))
-                   this
-                   true)))
+    (encode-const Int64 this)))
 
 (extend-type java.lang.Double
   Validatable
@@ -793,9 +849,9 @@
     true)
   Expression
   (return-type [this]
-    Float32)
+    Float64)
   (build [this]
-    (llvm/ConstReal (llvm-type Float32) this)))
+    (encode-const Float64 this)))
 
 
 (defn engine [module]
