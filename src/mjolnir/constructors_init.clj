@@ -180,7 +180,7 @@
                 (exp/->Do [~@body
                            (c-if (c-is ~times ~sym)
                                  0
-                                 (c-recur (c-iadd 1 ~sym) "->" tp/Int32))]))))
+                                 (c-recur (c-iadd 1 ~sym) "->" tp/Int64))]))))
 
 (defmacro c-let [bindings & body]
   (reduce (fn [a [local binding]]

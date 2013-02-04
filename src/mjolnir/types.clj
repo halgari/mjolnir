@@ -163,10 +163,10 @@
   Validatable
   (validate [this]
     (when extends
-      (assure (instance? extends StructType)))
+      (assure (instance? StructType extends)))
     (doseq [[tp name] members]
       (assure (keyword? name))
-      (assure (extends? tp Type))))
+      (assure (extends? Type (class tp)))))
   Type
   (llvm-type [this]
     (let [mems (flatten-struct this)]
@@ -189,6 +189,7 @@
 (def Int32* (->PointerType (->IntegerType 32)))
 (def Int8 (->IntegerType 8))
 (def Int64 (->IntegerType 64))
+(def Int64* (->PointerType Int64))
 (def Int1 (->IntegerType 1))
 (def I8* (->PointerType (->IntegerType 8)))
 

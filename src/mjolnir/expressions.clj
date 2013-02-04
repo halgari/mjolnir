@@ -268,6 +268,7 @@
   Validatable
   (validate [this]
     (binding [*fn* this]
+        (println name)
       (assure (string? name))
       (assure-type type)
       (assure (FunctionType? type))
@@ -668,17 +669,17 @@
   
   Expression
   (return-type [this]
-    (etype (return-type ptr)))
+    (return-type ptr))
   (build [this]
     (let [etp (etype (return-type ptr))
           idx (member-idx etp
                           member)
           _ (assert idx "Idx error, did you validate first?")
-
-          cptr (build (->BitCast ptr (->PointerType etp)))
+          bptr (build ptr)
+          cptr (build (->BitCast ptr  (->PointerType etp)))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "set_"))]
       (llvm/BuildStore *builder* (build val) gep)
-      ptr)))
+      bptr)))
 
 
 (defrecord Get [ptr member]
@@ -867,7 +868,7 @@
 
 (defn java-to-llvm-arg [x]
   (cond
-   (integer? x) (llvm/CreateGenericValueOfInt (llvm/Int32Type) x 0)
+   (integer? x) (llvm/CreateGenericValueOfInt (llvm/Int64Type) x 0)
    :else (assert false "Can't convert value")))
 
 (defn get-fn [engine module name]
