@@ -6,7 +6,9 @@
                  [speclj "2.5.0"]
                  [net.java.dev.jna/jna "3.4.0"]
                  [fipp "0.1.0-SNAPSHOT"]
-                 [criterium "0.3.1"]]
+                 [criterium "0.3.1"]
+                 [org.clojure/core.logic "0.8.0-rc2"]
+                 [org.clojure/core.match "0.2.0-alpha11"]]
   :plugins [[speclj "2.5.0"]]
   :test-paths ["spec/"]
   :profiles {:dev {:dependencies

@@ -1,7 +1,7 @@
 (ns examples.bf
   (:require [mjolnir.expressions :as exp]
             [mjolnir.constructors-init :as const]
-            [mjolnir.types :refer [Int8 Int32 ->PointerType valid?]]
+            [mjolnir.types :refer [Int8 Int64 ->PointerType valid?]]
             [mjolnir.llvmc :as l]
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file]])
@@ -12,13 +12,13 @@
 
 
 (def Cells (->PointerType Int8))
-(def RunCode-t (c/fn-t [] Int32))
+(def RunCode-t (c/fn-t [] Int64))
 (def Zero8 (exp/->ConstInteger 0 Int8))
 (def One8 (exp/->ConstInteger 1 Int8))
 
 
-(c/defn ^:extern ^:exact getchar [-> Int32])
-(c/defn ^:extern ^:exact putchar [Int32 chr -> Int32])
+(c/defn ^:extern ^:exact getchar [-> Int64])
+(c/defn ^:extern ^:exact putchar [Int64 chr -> Int64])
 
 (defmulti compile-bf (fn [ip code] (first code)))
 
@@ -69,7 +69,7 @@
 (defmethod compile-bf \.
   [in-ip code]
   {:ip (c/let [ip in-ip]
-              (putchar (exp/->ZExt (c/aget cells ip) Int32))
+              (putchar (exp/->ZExt (c/aget cells ip) Int64))
               ip)
    :code (next code)})
 
@@ -102,7 +102,7 @@
     {:ip (exp/->Loop [[ip_name ip]]
                      (c/if (c/is (c/aget cells (exp/->Local ip_name)) Zero8)
                            (exp/->Local ip_name)
-                           (c/recur ret-ip -> Int32)))
+                           (c/recur ret-ip -> Int64)))
      :code ret-code}))
 
 (defn -main [program & opts]
