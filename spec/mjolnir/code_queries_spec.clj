@@ -35,6 +35,12 @@
                                   [?id]
                                   (return-typeo ?id Int64))
                            count)))
+          (it "can query all nodes and their types"
+              (should= 2
+                       (-> (query @code
+                                  [?id ?tp]
+                                  (return-typeo ?id ?tp))
+                           count)))
           (it "can filter results"
               (should= 0
                        (-> (query @code
@@ -59,5 +65,4 @@
                                   (typeo ?id IAdd)
                                   (typeo ?id ?tp))
                            count))))
-
 

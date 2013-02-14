@@ -13,11 +13,55 @@
 
 
 
+(defn filter-map-relation [filter-fn map-fn]
+  (fn [node result]
+    (fn [a]
+      (let [wnode (walk a node)
+            wresult (walk a result)]
+        (match [(ground? wnode) (ground? wresult)]
+               [true false] (let [n (-> *index*
+                                        :id-path
+                                        wnode)]
+                              (when (filter-fn n)
+                                (unify a wresult (map-fn wnode))))
+               
+               [false true] (let [paths (-> *index*
+                                            :path-id)]
+                              (->> paths
+                                   (map (fn [[path id]]
+                                          (let [node (get-in *tree* path)]
+                                            (when (and (filter-fn node)
+                                                       (= (map-fn node)
+                                                          wresult))
+                                              (unify a wnode id)))))
+                                   (remove nil?)
+                                   to-stream))
+               [true true] (let [path ((:path-id *index*) wnode)
+                                 n (get-in *tree* path)]
+                             (when (filter-fn n)
+                               (let [r (map-fn n)]
+                                 (when (= r wresult)
+                                   (unify a wresult r)))))
+               [false false] (->> *index*
+                                  :path-id
+                                  (map (fn [[path id]]
+                                         (let [n (get-in *tree* path)]
+                                           (when (filter-fn n)
+                                             (unify a [wnode wresult] [id (map-fn n)])))))
+                                  (remove nil?)
+                                  to-stream)
+               [_ _] (assert false (str wnode wresult)))))))
+
 (defn idub [& more]
   (println "idub ->>>>> " more)
   (last more))
 
-(defn return-typeo [node return-type]
+
+(def return-typeo (filter-map-relation #(and (exp/Expression? %)
+                                             (not (exp/Module? %)))
+                                       exp/return-type))
+
+#_(defn return-typeo [node return-type]
   (fn [a]
     (let [wnode (walk a node)
           wreturn-type (walk a return-type)]
@@ -71,7 +115,10 @@
                                 idub
                                 to-stream)))))
 
-(defn typeo [node tp]
+(def typeo (filter-map-relation identity class))
+
+
+#_(defn typeo [node tp]
   (fn [a]
     (let [wnode (walk a node)
           wtp (walk a tp)]
