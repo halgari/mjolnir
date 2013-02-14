@@ -47,7 +47,9 @@
   `(exp/map->Fn {:type ~tp
             :arg-names ~(mapv clojure.core/name args)
             :name ~name
-            :body (let ~(vec (mapcat (fn [x idx] [x (exp/->Argument idx)])
+                 :body (let ~(vec (mapcat (fn [x idx] `[~x
+                                                        (exp/->Argument ~idx
+                                                                        (nth (:arg-types ~tp) ~idx))])
                                      args
                                      (range)))
                     (if ~(empty? body)
@@ -209,7 +211,8 @@
 
 
 (defn c-struct [name opts]
-  (tp/->StructType name (:extends opts) (:members opts)))
+  (assoc (tp/->StructType name (:extends opts) (:members opts))
+    :gc (:gc opts)))
 
 (defn- make-getter [[tp nm]]
   `(defn ~(symbol (str "-" (name nm)))
@@ -222,11 +225,13 @@
         members (:members opts)
         parted (partition 2 members)]
     `(do (def ~nm (c-struct ~(name nm)
-                            {:extends ~extends
-                             :members ~(vec (map
-                                             (fn [[tp nm]]
-                                               [tp (keyword (name nm))])
-                                             parted))}))
+                            ~(merge
+                             opts
+                             {:extends extends
+                              :members (vec (map
+                                              (fn [[tp nm]]
+                                                [tp (keyword (name nm))])
+                                              parted))})))
          ~@(map make-getter
                 parted))))
 

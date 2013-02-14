@@ -1,5 +1,6 @@
 (ns mjolnir.logic-trees
-  (:require [clojure.core.logic :refer :all]))
+  (:require [clojure.core.logic :refer :all]
+            [clojure.core.match :refer [match]]))
 
 (def ^:dynamic *index*)
 (def ^:dynamic *tree*)
@@ -58,7 +59,6 @@
                   key-paths
                   (repeatedly gen-id))]
     {:tree (reduce (fn [tree [path id]]
-                     (println tree path id)
                      (nil-update-in tree path #(with-meta %
                                              (assoc (meta %) :id id))))
                    x
@@ -135,38 +135,45 @@
     (let [wid (walk a id)
           wattr (walk a attr)
           wval (walk a val)]
-      (println wid wattr wval a)
-      (cond
-       (and (fresh? wid) (ground? wattr) (fresh? wval))
+      (match [(ground? wid) (ground? wattr) (ground? wval)]
+       [false true false]
        (-> (map
             (fn [[e v]]
               (unify a [wid wval] [e v]))
             ((:a-ev *index*) wattr))
            to-stream)
 
-       (and (fresh? wid) (ground? wattr) (ground? wval))
+       [false true true]
        (-> (map
             (fn [e]
               (unify a wid e))
             (get-in (:ave *index*) [wattr wval]))
            to-stream)       
 
-       (and (fresh? wid) (fresh? wattr) (ground? wval))
-       (do (println ((:v-ea *index*) wval))
-         (-> (map
-              (fn [[e attr]]
-                (unify a [wid wattr] [e attr]))
-              ((:v-ea *index*) wval))
-             to-stream))
-       
+       [false false true]
+       (-> (map
+            (fn [[e attr]]
+              (unify a [wid wattr] [e attr]))
+            ((:v-ea *index*) wval))
+           to-stream)
 
-       :else
+       [false false false]
+       (-> (mapcat
+            (fn [[path id]]
+              (let [mp (-> *index* :eav (get id))]
+                (map (fn [q]
+                       (let [[attr val] q]
+                         (unify a [wid wattr wval] [id attr val])))
+                     mp)))
+            (:path-id *index*))
+           to-stream)
+
+       [_ _ _]
        (println "failing" wid wattr wval a)))))
 
 (defmacro query [ent vs & q]
   `(binding [*tree* ~ent]
      (binding [*index* (gen-index *tree*)]
-       (println *index*)
        (time (vec (run* ~vs
                           ~@q))))))
 

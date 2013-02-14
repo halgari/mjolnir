@@ -3,6 +3,7 @@
             [mjolnir.types :refer :all]
             [mjolnir.expressions :refer :all]
             [mjolnir.constructors-init :as cinit]
+            [mjolnir.transforms.ref-count :as rc]
             )
   (:alias c mjolnir.constructors))
 
@@ -196,13 +197,15 @@
                     mb (build m)
                     #_(dump mb)
                     ]))
-          (it "supports refcounting"
+          #_(it "supports refcounting"
               (let [m (c/module ['mjolnir.constructors-spec/object-incref
                                  'mjolnir.constructors-spec/object-decref
                                  'mjolnir.constructors-spec/wrap-Int64
                                  'mjolnir.constructors-spec/unwrap-Int64
                                  'mjolnir.constructors-spec/Int64-Add
-                                 'mjolnir.constructors-spec/test-refc])
-                    mb (optimize (build m))
-                    _ (dump mb)])))
+                                 'mjolnir.constructors-spec/test-refc])]
+                (should-not= [] 
+                         (rc/query-refcnt-nodes m))
+                #_mb #_(optimize (build m))
+                #__ #_(dump mb))))
 

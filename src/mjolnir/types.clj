@@ -1,6 +1,7 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
-            [mjolnir.config :refer :all]))
+            [mjolnir.config :refer :all]
+            [clojure.core.logic :refer [IUninitialized]]))
 
 (defmacro assure [pred]
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
@@ -23,6 +24,7 @@
 
 (defprotocol Type
   (llvm-type [this]))
+
 
 (defn valid? [tp]
   (validate tp)
@@ -93,6 +95,8 @@
           ng (llvm/GetNamedGlobal *module* nm)]
       (assert ng (str "Could not find global: " nm))
       ng)))
+
+
 
 (defn pointer-type? [tp]
   (instance? PointerType tp))

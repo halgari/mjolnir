@@ -6,9 +6,10 @@
             [mjolnir.expressions :refer :all]
             [mjolnir.types :refer :all]
             [mjolnir.constructors-init :as const])
-  (:alias c mjolnir.constructors))
+  (:alias c mjolnir.constructors)
+  (:import [mjolnir.expressions IAdd]))
 
-(describe "code-queries"
+(describe "can query return types"
           (with code (c/iadd (c/iadd 4 3) 1))
           (it "can query code"
               (println (associative? @code) (keys @code))
@@ -18,7 +19,7 @@
                                   (fresh [?val]
                                          (tree ?id :a ?val)))
                            count)))
-          (it "can query a node's return a type"
+          (it "can query a node's return type"
               (println (associative? @code) (keys @code))
               (should= 2
                        (-> (query @code
@@ -42,4 +43,21 @@
                                          (tree ?id :a ?val)
                                          (return-typeo ?id Int32)))
                            count))))
+
+(describe "can query node types"
+          (with code (c/iadd (c/iadd 4 3) 3))
+          (it "can find all nodes of a given type"
+              (should= 2
+                       (-> (query @code
+                                  [?id]
+                                  (typeo ?id IAdd))
+                           count)))
+          (it "can find the type of a node"
+              (should= 2
+                       (-> (query @code
+                                  [?id ?tp]
+                                  (typeo ?id IAdd)
+                                  (typeo ?id ?tp))
+                           count))))
+
 

@@ -213,13 +213,13 @@
 (defprotocol NamedExpression
   (get-name [this]))
 
-(defrecord Argument [idx]
+(defrecord Argument [idx tp]
   Validatable
   (validate [this]
     (assure (argument *fn* idx)))
   Expression
   (return-type [this]
-    (return-type (argument *fn* idx)))
+    tp)
   (build [this]
     (build (argument *fn* idx))))
 
@@ -284,7 +284,7 @@
         (assure (llvm/kw->linkage linkage)))))
   Expression
   (return-type [this]
-    (return-type type))
+    type)
   (build [this]
     (when body
       (let [fnc (llvm/GetNamedFunction *module* name)
