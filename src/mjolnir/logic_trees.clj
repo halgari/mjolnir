@@ -1,13 +1,14 @@
 (ns mjolnir.logic-trees
   (:require [clojure.core.logic :refer :all]
-            [clojure.core.match :refer [match]]))
+            [clojure.core.match :refer [match]]
+            [clojure.pprint :refer [pprint]]))
 
 (def ^:dynamic *index*)
 (def ^:dynamic *tree*)
 
 (defmulti get-keys (fn [x]
                      (cond
-                      (or (seq? x) (vector? x)) :vec
+                      (vector? x) :vec
                       (associative? x) :map
                       :else :value)))
 
@@ -22,12 +23,28 @@
   [x]
   (keys x))
 
+(defn seqs-to-vecs [x]
+  (cond
+   (string? x) x
+   (or (seq? x) (vector? x))
+   (mapv seqs-to-vecs x)
+
+   (associative? x)
+   (reduce
+    (fn [acc k]
+      (assoc acc k
+             (seqs-to-vecs (get acc k))))
+    x
+    (keys x))
+
+   :else 
+   x))
+
 (defn -get-key-paths [x]
   (reduce (fn [accum key]
             (let [v (get x key)]
               (if (or (associative? v)
-                      (vector? v)
-                      (seq? v))
+                      (vector? v))
                 (concat
                  accum
                  [[key]]
@@ -54,6 +71,7 @@
 
 (defn assign-ids [x]
   (let [key-paths (get-key-paths x)
+        key-paths (map vec key-paths)
         id-pairs (map
                   vector
                   key-paths
@@ -72,12 +90,14 @@
     v))
 
 (defn gen-index [tree]
-  (let [{:keys [tree ids]} (assign-ids tree)
+  (let [fixed (seqs-to-vecs tree)
+        {:keys [tree ids]} (assign-ids fixed)
         path-id (zipmap (map first ids)
                         (map second ids))
         id-path (zipmap (map second ids)
                         (map first ids))]
-    {:path-id path-id
+    {:tree fixed
+     :path-id path-id
      :id-path id-path
      :eav (reduce (fn [acc path]
                     (let [id (get path-id path)
@@ -172,9 +192,10 @@
        (println "failing" wid wattr wval a)))))
 
 (defmacro query [ent vs & q]
-  `(binding [*tree* ~ent]
-     (binding [*index* (gen-index *tree*)]
-       (time (vec (run* ~vs
-                          ~@q))))))
+  `(binding [*index* (gen-index ~ent)]
+    (binding [*tree* (:tree *index*)]
+      #_(pprint (:a-ev *index*))
+      (time (vec (run* ~vs
+                       ~@q))))))
 
 

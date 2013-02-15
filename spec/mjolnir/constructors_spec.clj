@@ -4,6 +4,7 @@
             [mjolnir.expressions :refer :all]
             [mjolnir.constructors-init :as cinit]
             [mjolnir.transforms.ref-count :as rc]
+            [clojure.pprint :refer [pprint]]
             )
   (:alias c mjolnir.constructors))
 
@@ -130,6 +131,10 @@
 
 ;;;
 
+(defn idbg [x]
+  (pprint x)
+  x)
+
 (describe "constructors"
           (it "can create basic functions"
               (-> (c/module ['mjolnir.constructors-spec/fib])
@@ -197,7 +202,7 @@
                     mb (build m)
                     #_(dump mb)
                     ]))
-          #_(it "supports refcounting"
+          (it "supports refcounting"
               (let [m (c/module ['mjolnir.constructors-spec/object-incref
                                  'mjolnir.constructors-spec/object-decref
                                  'mjolnir.constructors-spec/wrap-Int64
@@ -205,7 +210,7 @@
                                  'mjolnir.constructors-spec/Int64-Add
                                  'mjolnir.constructors-spec/test-refc])]
                 (should-not= [] 
-                         (rc/query-refcnt-nodes m))
+                             (idbg (rc/query-refcnt-nodes m)))
                 #_mb #_(optimize (build m))
                 #__ #_(dump mb))))
 
