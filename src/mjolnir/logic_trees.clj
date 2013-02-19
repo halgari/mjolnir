@@ -55,7 +55,7 @@
           (get-keys x)))
 
 (defn get-key-paths [x]
-  (conj (-get-key-paths x)
+ (conj (-get-key-paths x)
         []))
 
 (let [id (atom 0)]
@@ -83,6 +83,7 @@
                    id-pairs)
      :ids id-pairs}))
 
+(defn node-id [x] (-> x meta :id))
 
 (defn get-value [v]
   (if-let [id (:id (meta v))]

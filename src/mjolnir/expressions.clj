@@ -305,8 +305,9 @@
   (stub-global [this]
     (let [tp (llvm-type type)
           gbl (llvm/AddFunction *module* name tp)]
-      (when-let [linkage (:linkage this)]
-        (llvm/SetLinkage gbl (llvm/kw->linkage linkage)))
+      #_(when-let [linkage (:linkage this)]
+          (llvm/SetLinkage gbl (llvm/kw->linkage linkage)))
+      (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl)))
 
 (defrecord Module [name body]

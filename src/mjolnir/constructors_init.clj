@@ -42,10 +42,11 @@
   #_{:post [(tp/valid? %)]}
   (tp/->FunctionType args ret))
 
-(defmacro c-fn [name tp args & body]
+(defmacro c-fn [name tp args linkage & body]
   {:pre [name tp args]}
   `(exp/map->Fn {:type ~tp
-            :arg-names ~(mapv clojure.core/name args)
+                 :arg-names ~(mapv clojure.core/name args)
+                 :linkage ~linkage
             :name ~name
                  :body (let ~(vec (mapcat (fn [x idx] `[~x
                                                         (exp/->Argument ~idx
@@ -82,6 +83,7 @@
                       (str nsname# "/" ~(clojure.core/name name)))
                    (c-fn-t ~(mapv first args) ~ret-type)
                    ~(mapv second args)
+                   ~(when (:extern (meta name)) :extern)
                    ~@body)]
        (register-global nsname# ~local-name f#)
        )))

@@ -4,6 +4,7 @@
             [mjolnir.expressions :refer :all]
             [mjolnir.constructors-init :as cinit]
             [mjolnir.transforms.ref-count :as rc]
+            [mjolnir.logic-trees :as lt]
             [clojure.pprint :refer [pprint]]
             )
   (:alias c mjolnir.constructors))
@@ -208,9 +209,11 @@
                                  'mjolnir.constructors-spec/wrap-Int64
                                  'mjolnir.constructors-spec/unwrap-Int64
                                  'mjolnir.constructors-spec/Int64-Add
-                                 'mjolnir.constructors-spec/test-refc])]
+                                 'mjolnir.constructors-spec/test-refc])
+                    m (:tree (lt/assign-ids m))]
+                (println (type m))
                 (should-not= [] 
-                             (idbg (rc/query-refcnt-nodes m)))
+                             (idbg (rc/ref-count-module m)))
                 #_mb #_(optimize (build m))
                 #__ #_(dump mb))))
 

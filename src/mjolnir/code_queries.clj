@@ -12,6 +12,7 @@
     (apply assoc this (interleave (keys this) (repeat nil)))))
 
 
+
 (defn idub [& more]
   (println "idub ->>>>> " more)
   (last more))
@@ -65,6 +66,8 @@
 
 (def typeo (filter-map-relation identity class))
 
+(def counto (filter-map-relation vector? count))
+(def last-idxo (filter-map-relation vector? (comp dec count)))
 
 #_(def gc-typeo (filter-map-relation #(and (tp/pointer-type? %)
                                          (tp/StructType? (tp/etype %)))
@@ -94,8 +97,19 @@
                    (iterate :extends)
                    (take-while (complement nil?))
                    last
+                   idub
                    :gc
                    :type)]
       #_(println "----->>>>>>>>>>>>>>>--" gtp gc-type)
       (= gtp gc-type))))
+
+(defn gc-type [tp]
+  (->> tp
+       tp/etype
+       (iterate :extends)
+       (take-while (complement nil?))
+       last
+       idub
+       :gc
+       :type))
 
