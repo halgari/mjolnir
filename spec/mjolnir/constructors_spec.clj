@@ -211,9 +211,8 @@
                                  'mjolnir.constructors-spec/Int64-Add
                                  'mjolnir.constructors-spec/test-refc])
                     m (:tree (lt/assign-ids m))]
-                (println (type m))
                 (should-not= [] 
-                             (idbg (rc/ref-count-module m)))
+                             (idbg (rc/do-gc m)))
                 #_mb #_(optimize (build m))
                 #__ #_(dump mb))))
 

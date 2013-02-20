@@ -78,12 +78,15 @@
                   (repeatedly gen-id))]
     {:tree (reduce (fn [tree [path id]]
                      (nil-update-in tree path #(with-meta %
-                                             (assoc (meta %) :id id))))
+                                                 (assoc (meta %) :id id))))
                    x
                    id-pairs)
      :ids id-pairs}))
 
-(defn node-id [x] (-> x meta :id))
+(defn node-id [x]
+  (let [id (-> x meta :id)]
+    (assert id (str "No id on node of type: " (str (type x)) " \n" (pr-str x)))
+    id))
 
 (defn get-value [v]
   (if-let [id (:id (meta v))]
@@ -97,7 +100,7 @@
                         (map second ids))
         id-path (zipmap (map second ids)
                         (map first ids))]
-    {:tree fixed
+    {:tree tree
      :path-id path-id
      :id-path id-path
      :eav (reduce (fn [acc path]
@@ -151,6 +154,33 @@
 (defn ground? [x]
   (not (lvar? x)))
 
+(defn print-type-path [path]
+  (vec (for [x (range (inc (count path)))]
+         (type (get-in *tree* (vec (take x path)))))))
+
+#_(defn verify-idx []
+  (doseq [[path id] (:path-id *index*)]
+    (let [
+          nd (get-in *tree* path)]
+      (if (or (vector? nd)
+              (associative? nd))
+        (assert (= (:id (meta nd))
+                   id)
+                (str "Bad id at path "
+                     (type (get-in *tree* [:a 0]))
+                     (= [:a 0] path)
+                     (= (get-in *tree* [:a 0])
+                        (get-in *tree* path))
+                     path
+                     " "
+                     id
+                     (pr-str (:id (meta nd)))
+                     nd
+                     (type nd)
+                     "-- -- "
+                     *tree*
+                     (print-type-path path)))))))
+
 (defn tree [id attr val]
   (fn [a]
     (let [wid (walk a id)
@@ -194,7 +224,8 @@
 
 (defmacro query [ent vs & q]
   `(binding [*index* (gen-index ~ent)]
-    (binding [*tree* (:tree *index*)]
+     (binding [*tree* (:tree *index*)]
+       #_(verify-idx)
       #_(pprint (:a-ev *index*))
       (time (vec (run* ~vs
                        ~@q))))))

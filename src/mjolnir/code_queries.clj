@@ -25,9 +25,9 @@
             wresult (walk a result)]
         (match [(ground? wnode) (ground? wresult)]
                [true false] (let [n (->> *index*
-                                        :id-path
-                                        wnode
-                                        (get-in *tree*))]
+                                         :id-path
+                                         wnode
+                                         (get-in *tree*))]
                               (when (filter-fn n)
                                 (unify a wresult (map-fn n))))
                
@@ -48,14 +48,14 @@
                                (let [r (map-fn n)]
                                  (when (= r wresult)
                                    (unify a wresult r)))))
-               [false false] (->> *index*
-                                  :path-id
-                                  (map (fn [[path id]]
-                                         (let [n (get-in *tree* path)]
-                                           (when (filter-fn n)
-                                             (unify a [wnode wresult] [id (map-fn n)])))))
-                                  (remove nil?)
-                                  to-stream)
+               [false false]  (->> *index*
+                                   :path-id
+                                   (map (fn [[path id]]
+                                          (let [n (get-in *tree* path)]
+                                            (when (filter-fn n)
+                                              (unify a [wnode wresult] [id (map-fn n)])))))
+                                   (remove nil?)
+                                   to-stream)
                [_ _] (assert false (str wnode wresult)))))))
 
 
@@ -97,7 +97,6 @@
                    (iterate :extends)
                    (take-while (complement nil?))
                    last
-                   idub
                    :gc
                    :type)]
       #_(println "----->>>>>>>>>>>>>>>--" gtp gc-type)
@@ -109,7 +108,6 @@
        (iterate :extends)
        (take-while (complement nil?))
        last
-       idub
        :gc
        :type))
 

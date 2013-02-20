@@ -219,7 +219,6 @@
     (assure (argument *fn* idx)))
   Expression
   (return-type [this]
-    (println tp)
     tp)
   (build [this]
     (build (argument *fn* idx))))
