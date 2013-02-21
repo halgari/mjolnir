@@ -93,7 +93,7 @@
     id
     v))
 
-(defn gen-index [tree]
+(defn -gen-index [tree]
   (let [fixed (seqs-to-vecs tree)
         {:keys [tree ids]} (assign-ids fixed)
         path-id (zipmap (map first ids)
@@ -146,6 +146,8 @@
                                (get-keys itm))))
                    {}
                    (map first ids))}))
+
+(def gen-index (memoize -gen-index))
 
 
 (defn fresh? [x]

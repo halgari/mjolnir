@@ -11,6 +11,7 @@
                  [org.clojure/core.match "0.2.0-alpha11"]]
   :plugins [[speclj "2.5.0"]]
   :test-paths ["spec/"]
+  :java-source-paths ["src/examples"]
   :profiles {:dev {:dependencies
                    [[speclj-growl "1.0.1"]
                     ]}})

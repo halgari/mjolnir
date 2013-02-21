@@ -201,7 +201,7 @@
 
 
 (defn do-gc [m]
-  (query m
+  #_(query m
          [a q b tp]
          (conde
           [(provideso a b )
@@ -216,16 +216,23 @@
           [(consumeso a b )
            (== q :consumes)
            (q/typeo a tp)]))
-  (query m
-         [?q]
-         (fresh [resources resource start end end-type]
-                (provideso start resources)
-                (membero resource resources)
-                (find-terminators resource end end-type)
-                (== ?q {:start start
-                        :resource resource
-                        :end end
-                        :end-type end-type}))))
+  (let [results (query m
+                       [?q]
+                       (fresh [resources resource start end end-type]
+                              (provideso start resources)
+                              (membero resource resources)
+                              (find-terminators resource end end-type)
+                              (== ?q {:start start
+                                      :resource resource
+                                      :end end
+                                      :end-type end-type})))
+        {:keys [tree id-path]} (gen-index m)]
+    (map (fn [{:keys [start resource end end-type] :as result}]
+           (merge result
+                  {:start-tp (type (get-in tree (get id-path start)))
+                   :start-name (:name (get-in tree (get id-path start)))
+                   :end-tp (type (get-in tree (get id-path end)))}))
+         results)))
 
 
 

@@ -1,4 +1,4 @@
-(ns examples.vectors
+(ns examples.vectors2
   (:gen-class)
   (:require [criterium.core :as crit])
   (:require [mjolnir.constructors-init :as const]
@@ -7,11 +7,9 @@
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr])
-  (:alias c mjolnir.constructors)
-  (:import [examples Vectors]))
+  (:alias c mjolnir.constructors))
 
 (set! *warn-on-reflection* true)
-(set! *unchecked-math* true)
 
 (definterface vec-interface
   (^doubles gen_vector [^long size])
@@ -92,7 +90,7 @@
                          -> Float64)
                 (intr/llvm-sqrt-f64 (mj-hadd sum)))))
 
-(c/defn ^:export mj-normalize [Float64x4* v Int64 size -> Float64x4*]
+(c/defn mj-normalize [Float64x4* v Int64 size -> Float64x4*]
   (c/let [len (mj-length v size)
           lenv (mj-propagate len)]
          (c/loop [idx 0]
@@ -105,7 +103,7 @@
                        v))))
 (def mjolnir-dll
   (let [target (config/default-target)
-        m (c/module ['examples.vectors
+        m (c/module ['examples.vectors2
                      'mjolnir.intrinsics/llvm-sqrt-f64])
         built (optimize (build m))
         bf (emit-to-file target built {:filename "vectors2.s"
@@ -127,13 +125,9 @@
 (defn -main []
   (let [vec (.gen-vector clj-imp size)]
     (println "Testing CLJ Implementation...")
-    (crit/quick-bench
+    (crit/bench
      (do (.normalize clj-imp vec size))))
-  (let [vec (Vectors/createBuffer size)]
-    (println "Testing Java Implementation...")
-    (crit/quick-bench
-     (Vectors/normalize vec)))
   (let [vec (fn-create-buffer (* 16 1024 1024 8))]
     (println "Testing Mjolnir (SSE) Code...")
-    (crit/quick-bench
+    (crit/bench
      (fn-mj-normalize vec (/ (* 16 1024 1024) 4)))))
