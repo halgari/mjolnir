@@ -111,6 +111,7 @@
         program-code (slurp program)
         _ (println "Building Expressions")
         cfn (const/c-fn "main" RunCode-t []
+                        nil
                         (c/using [cells (c/bitcast (c/malloc Int8 30000) Cells)]
                                  (c/dotimes [x 30000]
                                             (c/aset cells x Zero8))

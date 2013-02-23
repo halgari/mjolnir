@@ -27,5 +27,6 @@
   (require 'mjolnir.targets.darwin)
   (let [init (intern 'mjolnir.targets.darwin 'init-target)]
     (init (fn [d-fn]
-                                          (reset! default-target-fn d-fn)))
+              (reset! default-target-fn d-fn)))
     (@default-target-fn)))
+

@@ -1,6 +1,6 @@
 package examples;
 
-public static class Vectors
+public class Vectors
 {
     public static double square(double x)
     {
@@ -9,7 +9,7 @@ public static class Vectors
 
     public static double[] createBuffer(long size)
     {
-        return new double[size];
+        return new double[(int)size];
     }
 
     public static double length(double[] v, long size)
@@ -17,7 +17,7 @@ public static class Vectors
         double sum = 0;
         for (long x = 0; x < size; x++)
             {
-                sum += square(v[x]);
+                sum += square(v[(int)x]);
             }
         return Math.sqrt(sum);
     }
@@ -27,7 +27,7 @@ public static class Vectors
         double len = length(v, size);
         for (long x = 0; x < size; x++)
             {
-                v[x] /= len; 
+                v[(int)x] /= len; 
             }
         return v;
     }

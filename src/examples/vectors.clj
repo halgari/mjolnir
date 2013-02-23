@@ -121,6 +121,28 @@
 (def fn-create-buffer (get mjolnir-dll mj-create-buffer))
 (def fn-mj-normalize (get mjolnir-dll mj-normalize))
 
+
+(comment
+
+;;; ptx code
+
+  (c/defn ptx-length [Float64* v Int64 size -> Float64]
+    (c/loop [sum (c/const 0 Float64)
+             idx 0]
+            (c/if (c/< idx size)
+                  (c/recur
+                   (c/+ sum
+                        (c/aget v (c/+ (c/* (ptx/threaddim_x)
+                                            idx)
+                                       (ptx/threadidx_x)))))
+                  sum -> Float64)))
+
+  (c/defn ptx-normalize [Float64* v Float64* gbl Int64 size -> Float64*]
+    (ptx/atomic-add gbl (ptx-length v size))
+    (ptx/sync-threads)
+    (c/let [s (ptx/sqrt (aget gbl 0))]
+           )))
+
 (def ^long size (* 1024 1024 16))
 
 
@@ -132,7 +154,7 @@
   (let [vec (Vectors/createBuffer size)]
     (println "Testing Java Implementation...")
     (crit/quick-bench
-     (Vectors/normalize vec)))
+     (Vectors/normalize vec size)))
   (let [vec (fn-create-buffer (* 16 1024 1024 8))]
     (println "Testing Mjolnir (SSE) Code...")
     (crit/quick-bench

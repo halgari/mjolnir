@@ -60,16 +60,16 @@
   (build [this]
     (encode-const type val)))
 
-(defrecord BitCast [a tp]
+(defrecord BitCast [ptr tp]
   Validatable
   (validate [this]
-    (assure (Expression? a))
+    (assure (Expression? ptr))
     (assure (type? tp)))
   Expression
   (return-type [this]
     tp)
   (build [this]
-    (llvm/BuildBitCast *builder* (build a) (llvm-type tp) (genname "bitcast_"))))
+    (llvm/BuildBitCast *builder* (build ptr) (llvm-type tp) (genname "bitcast_"))))
 
 (defrecord Trunc [a tp]
   Validatable
@@ -281,7 +281,7 @@
       
       
       (when-let [linkage (:linkage this)]
-        (assure (llvm/kw->linkage linkage)))))
+        (assert (llvm/kw->linkage linkage) (str "No Linkage " linkage)))))
   Expression
   (return-type [this]
     type)

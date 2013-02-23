@@ -4,7 +4,7 @@
             [mjolnir.types :as tp]
             [mjolnir.code-queries :as q]
             [mjolnir.logic-trees :refer :all])
-  (:import [mjolnir.expressions Argument Fn IAdd Do Set Get Call Expression]))
+  (:import [mjolnir.expressions Argument Fn IAdd Do Set Get Call Expression BitCast New]))
 
 (extend-protocol  IUninitialized
   Expression
@@ -79,7 +79,7 @@
     (let [nd (get-in *tree* path)]
       (if (or (instance? Fn nd)
               (empty? path))
-        (:id (meta nd))
+        (node-id nd)
         (recur (pop path))))))
 
 (extend-protocol ResourceFlowManager
@@ -111,7 +111,7 @@
   Call
   (provides [this]
     (when (ref-counted? this)
-      [(node-id this)]))
+      [(q/idub (node-id this))]))
   (passes [this]
     [])
   (terminates [this]
@@ -124,6 +124,18 @@
   (consumes [this]
     [])
 
+  BitCast
+  (provides [this]
+    [])
+  (passes [this]
+    (when (ref-counted? this)
+      [[(node-id (:ptr this))
+        (node-id this)]]))
+  (terminates [this]
+    [])
+  (consumes [this]
+    [])  
+
   Fn
   (provides [this]
     (reduce (fn [acc [tp idx]]
@@ -132,14 +144,14 @@
                            :idx idx})
                 acc))
             []
-            (zipmap (-> this :type :arg-types)
-                    (range))))
+            (map vector
+                 (-> this :type :arg-types)
+                 (range))))
   (passes [this]
-    (when (ref-counted? (:body this))
-      [[(node-id (:body this))
-        (node-id this)]]))
-  (terminates [this]
     [])
+  (terminates [this]
+    (when (ref-counted? (:body this))
+      [(node-id (:body this))]))
   (consumes [this]
     [])
 
@@ -166,7 +178,18 @@
     [])
   (consumes [this]
     (when (ref-counted? (:ptr this))
-      [(node-id (:ptr this))])))
+      [(node-id (:ptr this))]))
+  
+  New
+  (provides [this]
+    (when (ref-counted? this)
+      [(node-id this)]))
+  (passes [this]
+    [])
+  (terminates [this]
+    [])
+  (consumes [this]
+    []))
 
 (defn- make-relation [f]
   (q/filter-map-relation #(and
@@ -200,6 +223,18 @@
              (find-terminators to loc end-type))])]))
 
 
+(defn gc-plan [results]
+  (let [grouped (group-by :resource results)]
+    (for [[k v] grouped]
+      (let [terminated (count (filter (comp (partial = :terminated) :end-type)
+                                      v))
+            consumed (count (filter (comp (partial = :consumed) :end-type)
+                                    v))]
+        {:consumes consumed
+         :terminations terminated
+         :resource k}))))
+
+
 (defn do-gc [m]
   #_(query m
          [a q b tp]
@@ -226,13 +261,15 @@
                                       :resource resource
                                       :end end
                                       :end-type end-type})))
-        {:keys [tree id-path]} (gen-index m)]
-    (map (fn [{:keys [start resource end end-type] :as result}]
-           (merge result
-                  {:start-tp (type (get-in tree (get id-path start)))
-                   :start-name (:name (get-in tree (get id-path start)))
-                   :end-tp (type (get-in tree (get id-path end)))}))
-         results)))
+        {:keys [tree id-path]} (gen-index m)
+        described (map (fn [{:keys [start resource end end-type] :as result}]
+                         (merge result
+                                {:start-tp (type (get-in tree (get id-path start)))
+                                 :start-name (:name (get-in tree (get id-path start)))
+                                 :end-tp (type (get-in tree (get id-path end)))}))
+                       results)]
+    {:desc described
+     :plan (gc-plan described)}))
 
 
 

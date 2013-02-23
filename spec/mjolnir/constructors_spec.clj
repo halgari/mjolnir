@@ -19,6 +19,17 @@
                       (c/iadd (fib (c/isub x 1))
                               (fib (c/isub x 2)))))
 
+(comment
+  
+  (defn fib [Int64 x -> Int64]
+    (if (or (is x 0)
+            (is x 1))
+      x
+      (+ (fib (- x 1))
+         (fib (- x 2)))))
+
+  )
+
 (def buf-size (* 1024 1024))
 
 (c/defn cnt [Int64 x -> Int64]
@@ -204,8 +215,8 @@
                     #_(dump mb)
                     ]))
           (it "supports refcounting"
-              (let [m (c/module ['mjolnir.constructors-spec/object-incref
-                                 'mjolnir.constructors-spec/object-decref
+              (let [m (c/module [#_'mjolnir.constructors-spec/object-incref
+                                 #_'mjolnir.constructors-spec/object-decref
                                  'mjolnir.constructors-spec/wrap-Int64
                                  'mjolnir.constructors-spec/unwrap-Int64
                                  'mjolnir.constructors-spec/Int64-Add
