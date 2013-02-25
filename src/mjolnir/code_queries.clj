@@ -111,3 +111,11 @@
        :gc
        :type))
 
+(defn gc [tp]
+  (->> tp
+       tp/etype
+       (iterate :extends)
+       (take-while (complement nil?))
+       last
+       :gc))
+

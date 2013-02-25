@@ -1,8 +1,15 @@
 (ns mjolnir.transforms.ref-count
-  (:require [clojure.core.logic :refer :all]
-            [mjolnir.expressions :as expr]
-            [mjolnir.types :as tp]
+  (:require [clojure.core.logic :as logic
+             :refer
+             [fresh == conde != IUninitialized fail membero]]
+            [mjolnir.expressions :as expr
+             :refer [build return-type
+                     ->Call ->Global kw->Global]]
+            [mjolnir.config :refer [*module* *builder*]]
+            [mjolnir.types :as tp
+             :refer [Validatable valid? assure]]
             [mjolnir.code-queries :as q]
+            [mjolnir.llvmc :as llvm]
             [mjolnir.logic-trees :refer :all])
   (:import [mjolnir.expressions Argument Fn IAdd Do Set Get Call Expression BitCast New]))
 
@@ -17,6 +24,12 @@
 (defn ref-counted? [a]
   (cond
    (tp/pointer-type? a) (= (q/gc-type a) :ref-count)
+   (expr/Expression? a) (recur (expr/return-type a))))
+
+(defn dec-refn [a]
+  (println "AAAAAA " a)
+  (cond
+   (tp/pointer-type? a) (:dec (q/gc a))
    (expr/Expression? a) (recur (expr/return-type a))))
 
 (comment
@@ -71,7 +84,8 @@
   (provides [this] "Lists one or more resources provided by this node")
   (passes [this] "Lists one or more resources returned by this node")
   (terminates [this] "Lists one or more resources that are terminated at this node")
-  (consumes [this] "Lists one or more resources that are read from by this node but not terminated by this same node"))
+  (consumes [this] "Lists one or more resources that are read from by this node but not terminated by this same node")
+  (patch-consume [this resource]))
 
 
 (defn defining-fn [id]
@@ -81,6 +95,28 @@
               (empty? path))
         (node-id nd)
         (recur (pop path))))))
+
+(defrecord DecRef [pass ptr]
+  Validatable
+  (validate [this]
+    (assure (valid? pass))
+    (assure (valid? ptr))
+    (assure (ref-counted? ptr)))
+  Expression
+  (return-type [this]
+    (return-type pass))
+  (build [this]
+    (let [p (build pass)]
+      (build (llvm/BuildCall *builder*
+                             (llvm/GetNamedFunction *module* (->
+                                                              ptr
+                                                              return-type
+                                                              q/gc
+                                                              :dec
+                                                              name))
+                             (llvm/map-parr build [ptr])
+                             "dec-ref"))
+      p)))
 
 (extend-protocol ResourceFlowManager
   Argument
@@ -179,6 +215,8 @@
   (consumes [this]
     (when (ref-counted? (:ptr this))
       [(node-id (:ptr this))]))
+  (patch-consume [this resource]
+    (->DecRef this (:ptr this)))
   
   New
   (provides [this]
@@ -223,16 +261,34 @@
              (find-terminators to loc end-type))])]))
 
 
+(defn patch-refs [plan {:keys [tree id-path]}]
+  (let [c (filter #(< 0 (:consumes %)) plan)
+        locs (mapcat
+              #(map (fn [x]
+                      [(id-path x)
+                       (:resource %)])
+                    (:consumes-loc %))
+              c)]
+    (println "....t idx" locs)
+    (reduce (fn [acc [path res]]
+              (println "....>>>> " path)
+              (update-in acc path patch-consume res))
+            tree
+            locs)))
+
 (defn gc-plan [results]
   (let [grouped (group-by :resource results)]
     (for [[k v] grouped]
       (let [terminated (count (filter (comp (partial = :terminated) :end-type)
                                       v))
-            consumed (count (filter (comp (partial = :consumed) :end-type)
-                                    v))]
-        {:consumes consumed
+            consumed (filter (comp (partial = :consumed) :end-type)
+                             v)]
+        {:consumes (count consumed)
+         :consumes-loc (map :end consumed)
          :terminations terminated
          :resource k}))))
+
+
 
 
 (defn do-gc [m]
@@ -261,15 +317,17 @@
                                       :resource resource
                                       :end end
                                       :end-type end-type})))
-        {:keys [tree id-path]} (gen-index m)
+        {:keys [tree id-path] :as idx} (gen-index m)
         described (map (fn [{:keys [start resource end end-type] :as result}]
                          (merge result
                                 {:start-tp (type (get-in tree (get id-path start)))
                                  :start-name (:name (get-in tree (get id-path start)))
                                  :end-tp (type (get-in tree (get id-path end)))}))
-                       results)]
+                       results)
+        plan (gc-plan described)]
     {:desc described
-     :plan (gc-plan described)}))
+     :plan plan
+     :tree (patch-refs plan idx)}))
 
 
 

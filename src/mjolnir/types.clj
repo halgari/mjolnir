@@ -191,11 +191,12 @@
 ;; Common types
 (def Int32 (->IntegerType 32))
 (def Int32* (->PointerType (->IntegerType 32)))
-(def Int8 (->IntegerType 8))
 (def Int64 (->IntegerType 64))
 (def Int64* (->PointerType Int64))
 (def Int1 (->IntegerType 1))
+(def Int8 (->IntegerType 8))
 (def I8* (->PointerType (->IntegerType 8)))
+(def Int8* (->PointerType (->IntegerType 8)))
 
 (def Float32 (->FloatType 32))
 (def Float32x4 (->VectorType Float32 4))

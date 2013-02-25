@@ -215,15 +215,19 @@
                     #_(dump mb)
                     ]))
           (it "supports refcounting"
-              (let [m (c/module [#_'mjolnir.constructors-spec/object-incref
-                                 #_'mjolnir.constructors-spec/object-decref
+              (let [m (c/module ['mjolnir.constructors-spec/object-incref
+                                 'mjolnir.constructors-spec/object-decref
                                  'mjolnir.constructors-spec/wrap-Int64
                                  'mjolnir.constructors-spec/unwrap-Int64
                                  'mjolnir.constructors-spec/Int64-Add
                                  'mjolnir.constructors-spec/test-refc])
                     m (:tree (lt/assign-ids m))]
-                (should-not= [] 
-                             (idbg (rc/do-gc m)))
+                (should (-> (rc/do-gc m)
+                            idbg
+                            :tree
+                            build
+                            optimize
+                            dump))
                 #_mb #_(optimize (build m))
                 #__ #_(dump mb))))
 

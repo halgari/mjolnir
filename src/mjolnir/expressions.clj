@@ -69,6 +69,7 @@
   (return-type [this]
     tp)
   (build [this]
+    (assert (not (keyword ptr)) ptr)
     (llvm/BuildBitCast *builder* (build ptr) (llvm-type tp) (genname "bitcast_"))))
 
 (defrecord Trunc [a tp]
@@ -235,20 +236,36 @@
     (build [this]
       (llvm/GetParam *llvm-fn* arg-idx)))
 
+(defn full-name [n]
+  (cond (string? n) n
+        (and (keyword? n) (namespace n)) (str (namespace n) "/" (name n))
+        (keyword? n) (name n)))
 
 (defrecord GetGlobal [name tp]
   Validatable
   (validate [this]
-    (assure (string? name))
+    (assure (or (string? name)
+                (keyword name)))
     (assure (type? tp)))
   Expression
   (return-type [this]
     tp)
   (build [this]
-    (if (FunctionType? tp)
-      (llvm/GetNamedFunction *module* name)
-      (llvm/GetNamedGlobal *module* name))))
+    (let [val (if (FunctionType? tp)
+                 (llvm/GetNamedFunction *module* (full-name name))
+                 (llvm/GetNamedGlobal *module* name))]
+      (assert val (str "Global not found " (full-name name)))
+      val)))
 
+(defrecord SizeOf [tp]
+  Validatable
+  (validate [this]
+    (assure (type? tp)))
+  Expression
+  (return-type [this]
+    Int64)
+  (build [this]
+    (llvm/SizeOf (llvm-type tp))))
 
 
 
@@ -286,6 +303,7 @@
   (return-type [this]
     type)
   (build [this]
+    (println "Building..." name)
     (when body
       (let [fnc (llvm/GetNamedFunction *module* name)
             newargs (into {} (map (fn [s idx]
@@ -299,6 +317,7 @@
           (reset! *block* (llvm/AppendBasicBlock fnc (genname "fblk_")))
           (llvm/PositionBuilderAtEnd *builder* @*block*)
           (llvm/BuildRet *builder* (build body) (genname "return_"))
+          (println "Done")
           fnc))))
   GlobalExpression
   (stub-global [this]
@@ -393,6 +412,25 @@
   Expression
   (return-type [this]
     (:ret-type (return-type fn)))
+  (build [this]
+    (llvm/BuildCall *builder*
+                    (build fn)
+                    (llvm/map-parr build args)
+                    (count args)
+                    (genname "call_"))))
+
+(defrecord CallPointer [fn args]
+  Validatable
+  (validate [this]
+    (valid? fn)
+    (assure (FunctionType? (etype (return-type fn))))
+    (doseq [arg args]
+      (assure (Expression? arg)))
+    (let [cnt (count (:arg-types (etype (return-type fn))))]
+      (assure (= (count args) cnt))))
+  Expression
+  (return-type [this]
+    (:ret-type (etype (return-type fn))))
   (build [this]
     (llvm/BuildCall *builder*
                     (build fn)
@@ -675,7 +713,7 @@
     (let [etp (etype (return-type ptr))
           idx (member-idx etp
                           member)
-          _ (assert idx "Idx error, did you validate first?")
+          _ (assert idx (pr-str "Idx error, did you validate first? " ptr " " member))
           bptr (build ptr)
           cptr (build (->BitCast ptr  (->PointerType etp)))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "set_"))]
@@ -826,6 +864,21 @@
     (llvm/AddGlobal *module*
                     (llvm-type type)
                     name)))
+
+(defn kw->Global [module kw]
+  (assert module "No Module Given")
+  (assert kw "No KW name given")
+  (println (keys module))
+  (let [f (->> module
+               :body
+               (filter #(= (:name %)
+                           (name kw)))
+               first)
+        
+        gg (->GetGlobal (name kw)
+                        (:type f))]
+    (assert f (str "Global not found " kw))
+    f))
 
 (defn Module? [mod]
   (instance? Module mod))

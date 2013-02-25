@@ -14,8 +14,6 @@
   (as-dll [this module opts] "Compiles the module as a shared library"))
 
 (defn find-llvm-target-by-name [name]
-  (println (llvm/target-seq))
-  (Thread/sleep 1000)
   (first (filter (comp (partial = name) :name)
                  (llvm/target-seq))))
 
