@@ -1,7 +1,8 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
-            [clojure.core.logic :refer [IUninitialized]]))
+            [clojure.core.logic :refer [IUninitialized]])
+  (:import [com.sun.jna Native Pointer]))
 
 (defmacro assure [pred]
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
@@ -78,6 +79,9 @@
 (defn float-type? [tp]
   (instance? FloatType tp))
 
+(declare const-string-array)
+
+
 (defrecord PointerType [etype]
   Validatable
   (validate [this]
@@ -91,10 +95,16 @@
     (:etype this))
   ConstEncoder
   (encode-const [this val]
-    (let [nm (:name val)
-          ng (llvm/GetNamedGlobal *module* nm)]
-      (assert ng (str "Could not find global: " nm))
-      ng)))
+    (if (nil? val)
+      (llvm/ConstNull (llvm-type this))
+      (if (and (= etype (->IntegerType 8))
+               (string? val))
+        (const-string-array val)
+        (let [nm (:name val)
+              ng (llvm/GetNamedGlobal *module* nm)]
+          (assert ng (str "Could not find global: " nm))
+          ng)))))
+
 
 
 
@@ -185,6 +195,22 @@
 (defn FunctionType? [tp]
   (instance? FunctionType tp))
 
+
+(defn const-string-array [s]
+  (let [ar (into-array Pointer (map #(llvm/ConstInt (llvm-type (->IntegerType 8)) % false)
+                                    (concat s [0])))
+        llvm-ar (llvm/ConstArray (llvm-type (->IntegerType 8))
+                        ar
+                        (count ar))
+        idx (into-array Pointer
+                        [(llvm/ConstInt (llvm-type (->IntegerType 64)) 0)])
+        gbl (llvm/AddGlobal *module* (llvm-type (->ArrayType (->IntegerType 8)
+                                                             (count ar)) )
+                           (name (gensym "str_")))
+        casted (llvm/ConstBitCast gbl
+                                  (llvm-type (->PointerType (->IntegerType 8))))]
+    (llvm/SetInitializer gbl llvm-ar)
+    casted))
 
 
 

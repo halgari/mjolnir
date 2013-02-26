@@ -239,7 +239,8 @@
 (defn full-name [n]
   (cond (string? n) n
         (and (keyword? n) (namespace n)) (str (namespace n) "/" (name n))
-        (keyword? n) (name n)))
+        (keyword? n) (name n)
+        :else (assert false (str "Can't get name of " (pr-str n)))))
 
 (defrecord GetGlobal [name tp]
   Validatable
@@ -376,11 +377,13 @@
           _ (llvm/PositionBuilderAtEnd *builder* thenblk)
           _ (reset! *block* thenblk)
           thenval (build then)
+          post-thenblk @*block*
           _ (when-not (= thenval :terminated)
               (llvm/BuildBr *builder* endblk))
           _ (llvm/PositionBuilderAtEnd *builder* elseblk)
           _ (reset! *block* elseblk)
           elseval (build else)
+          post-elseblk @*block*
           _ (when-not (= elseval :terminated)
               (llvm/BuildBr *builder* endblk))
           _ (llvm/PositionBuilderAtEnd *builder* endblk)
@@ -391,12 +394,12 @@
       (when-not (= thenval :terminated)
         (llvm/AddIncoming phi
                           (into-array Pointer [thenval])
-                          (into-array Pointer [thenblk])
+                          (into-array Pointer [post-thenblk])
                           1))
       (when-not (= elseval :terminated)
         (llvm/AddIncoming phi
                           (into-array Pointer [elseval])
-                          (into-array Pointer [elseblk])
+                          (into-array Pointer [post-elseblk])
                           1))      
       phi)))
 
@@ -956,6 +959,9 @@
     file))
 
 
+(defn verify [module]
+  (llvm/VerifyModule module)
+  module)
 
 
 (defn optimize [module]

@@ -171,6 +171,7 @@
 (defnative Pointer LLVMBuildOr)
 (defnative Pointer LLVMBuildMalloc)
 (defnative Pointer LLVMSizeOf)
+(defnative Pointer LLVMConstNull)
 
 (defnative Pointer LLVMBuildExtractElement)
 (defnative Pointer LLVMBuildInsertElement)

@@ -28,6 +28,7 @@
 
 (c/defn ^{:exact "GC_malloc"} ^:extern GC_malloc [Int64 size -> Int8*])
 (c/defn ^{:exact "GC_init"} ^:extern GC_init [-> Int8*])
+(c/defn ^{:exact "printf"} ^:extern print-Int64 [Int8* format Int64 val -> Int64 ])
 
 (defn tmalloc [tp]
   (c/bitcast (GC_malloc (->SizeOf tp))
@@ -117,6 +118,16 @@
   (wrap-WInt64 (c/+ (unwrap-WInt64 a)
                     (unwrap-WInt64 b))))
 
+(c/defn Int64-= [WObject* self WObject* a WObject* b -> WObject*]
+  (c/if (c/is (unwrap-WInt64 a)
+              (unwrap-WInt64 b))
+        (wrap-WInt64 1)
+        (wrap-WInt64 0)))
+
+(c/defn Int64-print [WObject* self WObject* a -> WObject*]
+  (wrap-WInt64 (print-Int64 (c/const "%i" -> Int8*)
+                            (unwrap-WInt64 a))))
+
 (c/defn WFn-invoke0 [WObject* fno -> WObject*]
   (->CallPointer (c/bitcast (unwrap-WFn fno) TNullaryFn*) [fno]))
 
@@ -145,7 +156,12 @@
 
 
 (def sym-maps
-  {'+ (wrap-global-fn ::Int64-+ TBinaryFn)})
+  {'+ {:indirect (wrap-global-fn ::Int64-+ TBinaryFn)
+       :direct [::Int64-+ TBinaryFn]}
+   '= {:indirect (wrap-global-fn ::Int64-= TBinaryFn)
+       :direct [::Int64-= TBinaryFn]}
+   'print {:indirect (wrap-global-fn ::Int64-print TUnaryFn)
+           :direct [::Int64-print TUnaryFn]}})
 
 
 (c/defn ^:exact main [-> Int64]
@@ -162,7 +178,7 @@
     (assert r (str "Could not resolve: " x))
     r))
 
-(def builtins #{'defn})
+(def builtins #{'defn 'if})
 
 (defmulti compile-builtin (fn [f & args]
                             (keyword (name f))))
@@ -182,20 +198,25 @@
 (defmethod compile-builtin :defn
   [_ nm args & body]
   (let [fn-t (argc->fn-t (count args))
-        new-global (wrap-global-fn nm fn-t)]
+        new-global (wrap-global-fn (name nm) fn-t)]
     (swap! globals assoc nm new-global)
     (->Fn (name nm)
           (argc->fn-t (count args))
           (concat ["this"]
                   (map name args))
           (binding [locals (merge
-                            {nm (wrap-global-fn nm fn-t)}
+                            {nm (wrap-global-fn (name nm) fn-t)}
                             (zipmap
                              args
                              (map #(->Argument % WObject*) (range 1 (inc (count args))))))]
             (->Do (mapv compile-item body))))))
 
-
+(defmethod compile-builtin :if
+  [_ test then else]
+  (c/if (c/is (unwrap-WInt64 (compile-item test))
+              0)
+        (compile-item else)
+        (compile-item then)))
 
 (defmethod compile-item :symbol
   [x]
@@ -207,10 +228,17 @@
 
 (defmethod compile-item :call
   [[f & args]]
-  (apply
-   invoke
-   (resolve-symbol f)
-   (map compile-item args)))
+  (let [resolved (resolve-symbol f)]
+    (if (and (map? resolved)
+             (:direct resolved))
+      (->Call (apply ->GetGlobal (:direct resolved))
+              (concat [(c/const nil -> WObject*)] (mapv compile-item args)))
+      (apply
+       invoke
+       (or (and (map? resolved)
+                (:indirect resolved))
+           resolved)
+       (mapv compile-item args)))))
 
 (defmethod compile-item :builtin
   [itm]
@@ -226,6 +254,7 @@
            (apply c/module ['examples.simple-lisp])
            #_debug
            build
+           #_verify
            optimize)]
     (dump d)
     (emit-to-file (config/default-target)
@@ -234,8 +263,18 @@
                    :obj-type :asm})))
 
 (defn -main []
-  (compile-lisp '[(defn -run []
-                    (+ 21 21))])
+  (compile-lisp '[(defn fib [a]
+                    (if (= a 0)
+                      a
+                      (if (= a 1)
+                        a
+                        (+ (fib (+ a -1))
+                           (fib (+ a -2))))))
+
+                  (defn -run []
+                    (print (fib 30)))])
+  (println "Finished")
+  (shutdown-agents)
   0)
 
 
