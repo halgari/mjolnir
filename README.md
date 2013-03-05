@@ -22,7 +22,8 @@ Expressions - Constructors emit Mjolnir expressions. These live in `mjolnir.type
 
 LLVMC - Expressions invoke the many functions found in `mjolnir.llvmc`. This namespace simply wraps the many functions found in LLVM. The wrapping is done via JNA. 
 
-LLVM-c - Internally, LLVM exposes the C++ api as a c library known as llvm-c. 
+LLVM-c - Internally, LLVM exposes the C++ api as a c library known as llvm-c.
+
 
 LLVM - And finally, at the bottom we have the llvm library
 
