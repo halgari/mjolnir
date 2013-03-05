@@ -1,6 +1,34 @@
 # mjolnir
 
-A Clojure library designed to ... well, that part is up to you.
+Mjolnir is a Clojure library designed to simplify native code generation. It is useful for writing on-the-fly high performance code, writing programming languages, or simply for exploring new how code performs on different platforms. 
+
+Internally, Mjolnir wraps the LLVM library. It then provides several layers of abstractions on top of LLVM. See the examples in the repository for indepth examples of the library at work. 
+
+## Layers
+
+Constructors - various Clojure functions that wrap expressions and can emulate let, defn, etc. To use these, use the following pattern
+
+    (ns example
+      (:require [mjolnir.constructors-init :as cinit])
+      (:alias c mjolnir.constructors))
+      
+The alias line performs some magic that allows code like the following from within any clojure file:
+
+    (c/defn square [Int64 a -> Int64]
+      (c/* a a))
+
+
+Expressions - Constructors emit Mjolnir expressions. These live in `mjolnir.types` and `mjolnir.expressions`. These expressions are simply Clojure records that implement several common protocols. Once constructed, these expressions can be built via `mjolnir.expressions/build`. But most of the time this function will only be invoked against `mjolnir.expressions/Module` as this record contains alot of setup code that is neede for the other expressions to compile. 
+
+LLVMC - Expressions invoke the many functions found in `mjolnir.llvmc`. This namespace simply wraps the many functions found in LLVM. The wrapping is done via JNA. 
+
+LLVM-c - Internally, LLVM exposes the C++ api as a c library known as llvm-c. 
+
+LLVM - And finally, at the bottom we have the llvm library
+
+## Supported Platforms
+
+At this time only OSX (64-bit) and NVidia PTX (on OSX) is supported. Adding new targets is easy, so if you want to add support for a platform, take a crack at it!. 
 
 ## Usage
 
