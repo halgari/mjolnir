@@ -1,6 +1,7 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
+            [mjolnir.targets.target :refer :all]
             [clojure.core.logic :refer [IUninitialized]])
   (:import [com.sun.jna Native Pointer]))
 
@@ -60,6 +61,14 @@
   (encode-const [this val]
     (llvm/ConstInt (llvm-type this) val true)))
 
+(defrecord VoidType []
+  Validatable
+  (validate [this]
+            true)
+  Type
+  (llvm-type [this]
+             (llvm/VoidType)))
+
 (defn integer-type? [tp]
   (instance? IntegerType tp))
 
@@ -89,7 +98,8 @@
     (assure-type etype))
   Type
   (llvm-type [this]
-    (llvm/PointerType (llvm-type etype) 0))
+    (llvm/PointerType (llvm-type etype)
+                      (default-address-space *target*)))
   ElementPointer
   (etype [this]
     (:etype this))
@@ -223,8 +233,10 @@
 (def Int8 (->IntegerType 8))
 (def I8* (->PointerType (->IntegerType 8)))
 (def Int8* (->PointerType (->IntegerType 8)))
+(def VoidT (->VoidType))
 
 (def Float32 (->FloatType 32))
+(def Float32* (->PointerType Float32))
 (def Float32x4 (->VectorType Float32 4))
 (def Float64 (->FloatType 64))
 (def Float64* (->PointerType Float64))

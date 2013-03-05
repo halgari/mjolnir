@@ -13,6 +13,14 @@
   target/ITarget
   (pointer-type [this]
     (types/->IntegerType 32 #_(* (llvm/PointerSize (:target llvm-target)) 8)))
+  (default-address-space [this]
+    0)
+  (get-calling-conv [this extern?]
+    (if extern?
+      llvm/CCallConv
+      llvm/X86FastcallCallConv
+      #_llvm/CCallConv
+      #_llvm/FastCallConv))
   (create-target-machine [this opts]
     (llvm/CreateTargetMachine (:target llvm-target)
                               (str march "-" vendor "-" os)

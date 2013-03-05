@@ -89,6 +89,7 @@
 (defnative Integer LLVMDisposePassManager)
 (defnative Integer LLVMDisposeExecutionEngine)
 (defnative Integer LLVMBuildRet)
+(defnative Integer LLVMBuildRetVoid)
 
 (defnative Integer LLVMLinkInJIT)
 (defnative Integer LLVMLinkInInterpreter)
@@ -104,7 +105,10 @@
 (defnative Pointer LLVMConstInt)
 (defnative Pointer LLVMConstReal)
 (defnative Pointer LLVMBuildICmp)
+(defnative Pointer LLVMBuildFCmp)
 (defnative Pointer LLVMIntType)
+(defnative Pointer LLVMVoidType)
+
 (defnative Pointer LLVMBuildCondBr)
 (defnative Pointer LLVMBuildPhi)
 (defnative Integer LLVMAddIncoming)
@@ -144,6 +148,7 @@
 (defnative Pointer LLVMConstBitCast)
 (defnative Integer LLVMCountParams)
 (defnative Pointer LLVMAddGlobal)
+(defnative Pointer LLVMAddGlobalInAddressSpace)
 (defnative Integer LLVMSetInitializer)
 (defnative Integer LLVMWriteBitcodeToFile)
 (defnative Pointer LLVMGetNamedGlobal)
@@ -158,6 +163,7 @@
 (defnative Pointer LLVMBuildStructGEP)
 (defnative Pointer LLVMBuildAdd)
 (defnative Pointer LLVMBuildFAdd)
+(defnative Pointer LLVMBuildFSub)
 (defnative Pointer LLVMBuildMul)
 (defnative Pointer LLVMBuildFMul)
 (defnative Pointer LLVMBuildFDiv)
@@ -168,6 +174,8 @@
 (defnative Pointer LLVMBuildNot)
 (defnative Pointer LLVMBuildZExt)
 (defnative Pointer LLVMBuildTrunc)
+(defnative Pointer LLVMBuildFPToSI)
+(defnative Pointer LLVMBuildSIToFP)
 (defnative Pointer LLVMBuildOr)
 (defnative Pointer LLVMBuildMalloc)
 (defnative Pointer LLVMSizeOf)
@@ -308,6 +316,24 @@
    LLVMIntSLT
    LLVMIntSLE])
 
+(defenum LLVMRealPredicate
+  [LLVMRealPredicateFalse
+   LLVMRealOEQ
+   LLVMRealOGT
+   LLVMRealOGE
+   LLVMRealOLT
+   LLVMRealOLE
+   LLVMRealONE
+   LLVMRealORD
+   LLVMRealUNO
+   LLVMRealUEQ
+   LLVMRealUGT
+   LLVMRealUGE
+   LLVMRealULT
+   LLVMRealULE
+   LLVMRealUNE
+   LLVMRealPredicateTrue])
+
 (defnative Integer LLVMInitializeCppBackendTargetInfo)
 (defnative Integer LLVMInitializeCppBackendTarget)
 (defnative Integer LLVMInitializeCppBackendTargetMC)
@@ -333,6 +359,8 @@
 (def ColdCallConv 9)
 (def X86StdcallCallConv 64)
 (def X86FastcallCallConv 65)
+(def PTXGlobal 71)
+(def PTXDevice 72)
 
 (def AbortProcessAction 0)
 (def PrintMessageAction 1)

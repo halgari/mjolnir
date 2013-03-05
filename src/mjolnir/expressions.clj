@@ -4,6 +4,7 @@
             [mjolnir.config :refer :all]
             [clojure.java.shell :as shell]
             [clojure.string :as string]
+            [mjolnir.targets.target :as target]
             [bbloom.fipp.edn :refer (pprint pretty pretty-map) :rename {pprint fipp}])
   (:import [com.sun.jna Native Pointer]))
 
@@ -175,17 +176,22 @@
                   (genname "or_"))))
 
 (def cmp-maps
-  {:= llvm/LLVMIntEQ
-   :!= llvm/LLVMIntNE
-   :> llvm/LLVMIntSGT
-   :< llvm/LLVMIntSLT
-   :<= llvm/LLVMIntSLE
-   :>= llvm/LLVMIntSGE})
+  {:int {:= llvm/LLVMIntEQ
+         :!= llvm/LLVMIntNE
+         :> llvm/LLVMIntSGT
+         :< llvm/LLVMIntSLT
+         :<= llvm/LLVMIntSLE
+         :>= llvm/LLVMIntSGE}
+   :float {:= llvm/LLVMRealOEQ
+         :!= llvm/LLVMRealONE
+         :> llvm/LLVMRealOGT
+         :< llvm/LLVMRealOLT
+         :<= llvm/LLVMRealOLE
+         :>= llvm/LLVMRealOGE}})
 
 (defrecord Cmp [pred a b]
   Validatable
   (validate [this]
-    (assure (pred cmp-maps))
     (valid? a)
     (valid? b)
     (Expression? a)
@@ -195,7 +201,13 @@
   (return-type [this]
     Int1)
   (build [this]
-    (llvm/BuildICmp *builder* (pred cmp-maps) (build a) (build b) (genname "is_"))))
+    (let [[tp f]
+          (cond
+           (integer-type? (return-type a)) [:int llvm/BuildICmp]
+           (float-type? (return-type a)) [:float llvm/BuildFCmp]
+           (vector-type? (return-type a)) [:float llvm/BuildFCmp])]
+      (assert (pred (tp cmp-maps)) "Invalid predicate symbol")
+      (f *builder* (pred (tp cmp-maps)) (build a) (build b) (genname "cmp_")))))
 
 (defrecord Not [a]
   Validatable
@@ -246,7 +258,7 @@
   Validatable
   (validate [this]
     (assure (or (string? name)
-                (keyword name)))
+                (keyword? name)))
     (assure (type? tp)))
   Expression
   (return-type [this]
@@ -254,7 +266,7 @@
   (build [this]
     (let [val (if (FunctionType? tp)
                  (llvm/GetNamedFunction *module* (full-name name))
-                 (llvm/GetNamedGlobal *module* name))]
+                 (llvm/GetNamedGlobal *module* (full-name name)))]
       (assert val (str "Global not found " (full-name name)))
       val)))
 
@@ -286,7 +298,6 @@
   Validatable
   (validate [this]
     (binding [*fn* this]
-        (println name)
       (assure (string? name))
       (assure-type type)
       (assure (FunctionType? type))
@@ -294,7 +305,8 @@
       (when body
         (assure (Expression? body))
         (valid? body)
-        (assure-same-type (return-type body) (:ret-type type)))
+        (when (not= (:ret-type type) VoidT)
+          (assure-same-type (return-type body) (:ret-type type))))
       (assure (= (count (:arg-types type)) (count arg-names)))
       
       
@@ -304,28 +316,30 @@
   (return-type [this]
     type)
   (build [this]
-    (println "Building..." name)
     (when body
       (let [fnc (llvm/GetNamedFunction *module* name)
             newargs (into {} (map (fn [s idx]
                                     [s (llvm/GetParam fnc idx )])
                                   arg-names
                                   (range (count arg-names))))]
-        (llvm/SetFunctionCallConv fnc llvm/CCallConv)
         (binding [*fn* this
                   *llvm-fn* fnc
                   *llvm-locals* newargs]
           (reset! *block* (llvm/AppendBasicBlock fnc (genname "fblk_")))
           (llvm/PositionBuilderAtEnd *builder* @*block*)
-          (llvm/BuildRet *builder* (build body) (genname "return_"))
-          (println "Done")
+          (if (= (:ret-type type) VoidT)
+            (do
+              (build body)
+              (llvm/BuildRetVoid *builder*))
+            (llvm/BuildRet *builder* (build body) (genname "return_")))
           fnc))))
   GlobalExpression
   (stub-global [this]
     (let [tp (llvm-type type)
           gbl (llvm/AddFunction *module* name tp)]
-      #_(when-let [linkage (:linkage this)]
-          (llvm/SetLinkage gbl (llvm/kw->linkage linkage)))
+      (llvm/SetFunctionCallConv gbl (target/get-calling-conv *target*
+                                                             (= :extern
+                                                                (:linkage this))))
       (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl)))
 
@@ -479,6 +493,18 @@
   (build [this]
     (llvm/BuildSub *builder* (build a) (build b) (genname "isub_"))))
 
+(defrecord FSub [a b]
+  Validatable
+  (validate [this]
+    (valid? a)
+    (valid? b)
+    (assure-same-type (return-type a) (return-type b)))
+  Expression
+  (return-type [this]
+    (return-type a))
+  (build [this]
+    (llvm/BuildFSub *builder* (build a) (build b) (genname "fsub_"))))
+
 (defrecord Local [nm]
   Validatable
   (validate [this]
@@ -510,6 +536,26 @@
                     (integer-type? (return-type a)) (->IAdd a x)
                     (float-type? (return-type a)) (->FAdd a x)
                     (vector-type? (return-type a)) (->FAdd a x)))
+                (first exprs)
+                (next exprs))
+        build)))
+
+(defrecord -Op [exprs]
+  Validatable
+  (validate [this]
+    (doseq [exp exprs]
+      (assure (valid? exp)))
+    (assert (apply = (map return-type exprs))
+            "Every Expression in a - must return the same type"))
+  Expression
+  (return-type [this]
+    (return-type (first exprs)))
+  (build [this]
+    (-> (reduce (fn [a x]
+                  (cond
+                    (integer-type? (return-type a)) (->ISub a x)
+                    (float-type? (return-type a)) (->FSub a x)
+                    (vector-type? (return-type a)) (->FSub a x)))
                 (first exprs)
                 (next exprs))
         build)))
@@ -724,6 +770,18 @@
       bptr)))
 
 
+(defrecord Store [ptr val]
+  Validatable
+  (validate [this]
+    (assure (valid? ptr))
+    (assure (valid? val)))
+  Expression
+  (return-type [this]
+    (return-type ptr))
+  (build [this]
+    (build (->ASet ptr [0] val))))
+
+
 (defrecord Get [ptr member]
   Validatable
   (validate [this]
@@ -859,19 +917,42 @@
   (return-type [this]
     type)
   (build [this]
-    (llvm/SetInitializer (llvm/GetNamedGlobal *module* name)
-                         (encode-const type val)))
+    (when (not (= val :extern))
+      (let [gbl (llvm/GetNamedGlobal *module* name)]
+        (assert gbl (str "Can't find Global " (pr-str this)))
+        (llvm/SetInitializer
+         gbl
+         (encode-const type val))
+        gbl)))
   GlobalExpression
   (stub-global [this]
-    (println "stub global " name)
-    (llvm/AddGlobal *module*
+    (println name)
+    (llvm/AddGlobalInAddressSpace *module*
                     (llvm-type type)
-                    name)))
+                    name
+                    (target/default-address-space *target*))))
+
+(defrecord FPToSI [val tp]
+  Validatable
+  (validate [this])
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (llvm/BuildFPToSI *builder* (build val) (llvm-type tp) (genname "toui_"))))
+
+(defrecord SIToFP [val tp]
+  Validatable
+  (validate [this])
+  Expression
+  (return-type [this]
+    tp)
+  (build [this]
+    (llvm/BuildSIToFP *builder* (build val) (llvm-type tp) (genname "toui_"))))
 
 (defn kw->Global [module kw]
   (assert module "No Module Given")
   (assert kw "No KW name given")
-  (println (keys module))
   (let [f (->> module
                :body
                (filter #(= (:name %)
@@ -897,9 +978,10 @@
     true)
   Expression
   (return-type [this]
-    Int64)
+    (assert *int-type* "No type set for ints")
+    *int-type*)
   (build [this]
-    (encode-const Int64 this)))
+    (encode-const *int-type* this)))
 
 (extend-type java.lang.Double
   Validatable
@@ -907,9 +989,12 @@
     true)
   Expression
   (return-type [this]
-    Float64)
+    (assert *float-type* "No type set for floats")
+    *float-type*)
   (build [this]
-    (encode-const Float64 this)))
+    (encode-const *float-type* this)))
+
+
 
 
 (defn engine [module]

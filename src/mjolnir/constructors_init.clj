@@ -26,6 +26,9 @@
 (defn c-+ [& exprs]
   (exp/->+Op exprs))
 
+(defn c-- [& exprs]
+  (exp/->-Op exprs))
+
 (defn c-and [& exprs]
   (reduce exp/->And
           (first exprs)

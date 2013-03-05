@@ -3,6 +3,12 @@
             ))
 
 (def ^:dynamic *target*)
+
+;; These set the type that will be used to encode consts for both
+;; integers and floats
+(def ^:dynamic *float-type*)
+(def ^:dynamic *int-type*)
+
 (def ^:dynamic *builder*)
 (def ^:dynamic *module*)
 (def ^:dynamic *fn*)

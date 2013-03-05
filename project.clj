@@ -8,10 +8,12 @@
                  [fipp "0.1.0-SNAPSHOT"]
                  [criterium "0.3.1"]
                  [org.clojure/core.logic "0.8.0-rc2"]
-                 [org.clojure/core.match "0.2.0-alpha11"]]
+                 [org.clojure/core.match "0.2.0-alpha11"]
+                 [jcuda/jcuda "0.5.0"]]
   :plugins [[speclj "2.5.0"]]
   :test-paths ["spec/"]
   :java-source-paths ["src/examples"]
+  :jvm-opts ["-Djava.library.path=/usr/lib"]
   :profiles {:dev {:dependencies
                    [[speclj-growl "1.0.1"]
                     ]}})

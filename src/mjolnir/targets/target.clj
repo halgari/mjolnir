@@ -9,6 +9,8 @@
 
 (defprotocol ITarget
   (pointer-type [this] "Get the system pointer mjolnir type")
+  (default-address-space [this] "Gets the default address space. Normally this is 0, it's 1 for PTX")
+  (get-calling-conv [this extern?] "Returns the calling convention for a function. Could be different if not extern.")
   (create-target-machine [this opts] "Creates an llvm target machine from this target")
   (emit-to-file [this module opts] "Writes the module to a file with the specified options")
   (as-dll [this module opts] "Compiles the module as a shared library"))
