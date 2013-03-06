@@ -10,6 +10,16 @@
   (:import [jcuda Pointer NativePointerObject]
            [jcuda.driver CUmodule JCudaDriver CUfunction CUdeviceptr CUdevice CUcontext]))
 
+(def allowed-char? (set "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_123456790"))
+
+(defn convert-to-char [x]
+  (if (allowed-char? x)
+    x
+    (str "_" (.toUpperCase (Integer/toHexString (int x))) "_")))
+
+(defn mangle-ptx [nm]
+  (apply str (map convert-to-char nm)))
+
 (defn to-ptx-arg [a]
   (cond
    (float? a) (Pointer/to (float-array [a]))
@@ -113,8 +123,8 @@
         (valAt [this k el]
           (let [function (CUfunction.)
                 nm (-> (k) :fn)]
-            (println "finding" (:name nm))
-            (cu ModuleGetFunction function cumodule "examples_2E_mandelbrot_2F_calc_2D_mandelbrot_2D_ptx")
+            (println "finding" (mangle-ptx (:name nm)))
+            (cu ModuleGetFunction function cumodule (mangle-ptx (:name nm)))
             (fn [[bx by bz] [gx gy gz]]
               (fn [& args]
                 (let [args (encode-args args)]
