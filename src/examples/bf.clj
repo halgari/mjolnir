@@ -122,22 +122,18 @@
                                      (if code
                                        (recur ip code)
                                        ip)))))]
-    
-    (let [target (config/default-target)]
+
+    (binding [config/*target* (config/default-target)
+              config/*int-type* Int64]
       (let [_ (println "Compiling")
-            built (exp/build (c/module ['examples.bf] cfn))
+            module (c/module ['examples.bf]
+                             cfn)
+            built (exp/build module)
             optimized (exp/optimize built)
             _ (println "Writing Object File")
-            compiled (time (emit-to-file target
+            compiled (time (emit-to-file config/*target*
                                          optimized
-                                         options))]
-        1
-        #_(when-not output-file
-          (println "Running")
-          (time (-> compiled
-                    (exp/run-exe)
-                    (pr-str)
-                    println)))))
+                                         options))]))
     (println "Finished")
     (shutdown-agents)
     0))

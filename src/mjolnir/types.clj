@@ -1,8 +1,7 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
-            [mjolnir.targets.target :refer :all]
-            [clojure.core.logic :refer [IUninitialized]])
+            [mjolnir.targets.target :refer :all])
   (:import [com.sun.jna Native Pointer]))
 
 (defmacro assure [pred]

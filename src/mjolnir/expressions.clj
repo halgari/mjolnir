@@ -4,18 +4,8 @@
             [mjolnir.config :refer :all]
             [clojure.java.shell :as shell]
             [clojure.string :as string]
-            [mjolnir.targets.target :as target]
-            [bbloom.fipp.edn :refer (pprint pretty pretty-map) :rename {pprint fipp}])
+            [mjolnir.targets.target :as target])
   (:import [com.sun.jna Native Pointer]))
-
-(defmethod pretty clojure.lang.IRecord [r]
-    [:span (-> r class .getName (clojure.string/split #"\.") last) (pretty-map r)])
-
-(defn pdebug [x]
-  (println "-------------")
-  (fipp x)
-  (println "-------------")
-  x)
 
 (def genname (comp name gensym))
 
