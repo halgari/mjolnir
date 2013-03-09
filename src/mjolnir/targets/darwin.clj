@@ -18,8 +18,8 @@
   (get-calling-conv [this extern?]
     (if extern?
       llvm/CCallConv
-      llvm/X86FastcallCallConv
-      #_llvm/CCallConv
+      #_llvm/X86FastcallCallConv
+      llvm/CCallConv
       #_llvm/FastCallConv))
   (create-target-machine [this opts]
     (llvm/CreateTargetMachine (:target llvm-target)

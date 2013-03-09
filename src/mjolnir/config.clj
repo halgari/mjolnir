@@ -27,6 +27,12 @@
      (let [~nm *target*]
        ~@body)))
 
+(defmacro with-config [[int-type float-type target] & body]
+  `(binding [*int-type* ~int-type
+             *float-type* ~float-type
+             *target* ~target]
+     ~@body))
+
 (def default-target-fn (atom nil))
 
 (defn default-target []

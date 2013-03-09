@@ -3,7 +3,7 @@
   (:require [criterium.core :as crit])
   (:require [mjolnir.constructors-init :as const]
             [mjolnir.types :as types :refer [I8* Int64 Float64 Float64x4 Float64x4*]]
-            [mjolnir.expressions :refer [build pdebug optimize dump ->ConstVector]]
+            [mjolnir.expressions :refer [build optimize dump ->ConstVector]]
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr])
@@ -104,19 +104,20 @@
                                       -> Float64x4*))
                        v))))
 (def mjolnir-dll
-  (let [target (config/default-target)
-        m (c/module ['examples.vectors
-                     'mjolnir.intrinsics/llvm-sqrt-f64])
-        built (optimize (build m))
-        bf (emit-to-file target built {:filename "vectors2.s"
-                                       :output-type :asm
-                                       :cpu :core-avx-i})
-        _ (dump built)
-        dll (as-dll target
-                    built
-                    {:verbose true
-                     :cpu :core-avx-i})]
-    dll))
+  (config/with-config [Int64 Float64 (config/default-target)]
+    (let [m (c/module ['examples.vectors
+                       'mjolnir.intrinsics/llvm-sqrt-f64])
+          built (optimize (build m))
+          bf (emit-to-file config/*target*
+                           built {:filename "vectors2.s"
+                                  :output-type :asm
+                                  :cpu :core-avx-i})
+          _ (dump built)
+          dll (as-dll config/*target*
+                      built
+                      {:verbose true
+                       :cpu :core-avx-i})]
+      dll)))
 
 (def fn-create-buffer (get mjolnir-dll mj-create-buffer))
 (def fn-mj-normalize (get mjolnir-dll mj-normalize))

@@ -29,7 +29,7 @@
     (if (= \] (first code))
       {:code (next code)
        :ip ip}
-      (let [c (compile-bf ip code)]
+      (let [c (compile-bf ip code)]'
         (recur (:ip c)
                (:code c))))))
 
@@ -110,6 +110,7 @@
   (let [options (apply hash-map (map read-string opts))
         program-code (slurp program)
         _ (println "Building Expressions")
+        
         cfn (const/c-fn "main" RunCode-t []
                         nil
                         (c/using [cells (c/bitcast (c/malloc Int8 30000) Cells)]

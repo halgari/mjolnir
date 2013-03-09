@@ -2,7 +2,7 @@
   (:require [criterium.core :as crit])
   (:require [mjolnir.constructors-init :as const]
             [mjolnir.types :as types :refer [I8* Int64 Float32 Float32* Float64x4 Float64x4* VoidT]]
-            [mjolnir.expressions :refer [build pdebug optimize dump ->ConstVector ->Do ->FPToSI ->SIToFP]]
+            [mjolnir.expressions :refer [build optimize dump ->ConstVector ->Do ->FPToSI ->SIToFP]]
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr]
@@ -15,6 +15,7 @@
            [examples Mandelbrot]
            [com.sun.jna Native Pointer Memory]
            ))
+
 
 (defn display-image [^floats d ^long width]
   (let [img (BufferedImage. width (/ (count d) width) BufferedImage/TYPE_INT_ARGB)

@@ -1,8 +1,10 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
+            [mjolnir.ssa :refer :all]
             [mjolnir.targets.target :refer :all])
   (:import [com.sun.jna Native Pointer]))
+
 
 (defmacro assure [pred]
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
@@ -58,7 +60,14 @@
     (llvm/IntType width))
   ConstEncoder
   (encode-const [this val]
-    (llvm/ConstInt (llvm-type this) val true)))
+    (llvm/ConstInt (llvm-type this) val true))
+  IToDatoms
+  (-to-datoms [this conn]
+    (transact-singleton
+     conn
+     {:node/type :type.int
+      :type/width width})))
+
 
 (defrecord VoidType []
   Validatable
@@ -82,7 +91,13 @@
       64 (llvm/DoubleType)))
   ConstEncoder
   (encode-const [this val]
-    (llvm/ConstReal (llvm-type this) val)))
+    (llvm/ConstReal (llvm-type this) val))
+  IToDatoms
+  (-to-datoms [this conn]
+    (transact-singleton
+     conn
+     {:node/type :type.float
+      :type/width width})))
 
 (defn float-type? [tp]
   (instance? FloatType tp))
@@ -112,7 +127,13 @@
         (let [nm (:name val)
               ng (llvm/GetNamedGlobal *module* nm)]
           (assert ng (str "Could not find global: " nm))
-          ng)))))
+          ng))))
+  IToDatoms
+  (-to-datoms [this conn]
+    (transact-singleton
+     conn
+     {:node/type :type.pointer
+      :type/element-type (:db/id (-to-datoms etype conn))})))
 
 
 
