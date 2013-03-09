@@ -24,8 +24,13 @@
 
 
 (defn default-schema []
-  {:list/next #{:one :ref}
+  {:list/tail #{:one :ref}
    :fn/type #{:one :ref}
+
+   :type.fn/return #{:one :ref}
+   :type.fn/arguments #{:one :ref}
+
+   :list/head #{:one :ref} 
 
    :node/type #{:one :keyword}
    :type/width #{:one :int}
@@ -70,10 +75,29 @@
          (d/entity db-after))))
 
 (defn transact-singleton [conn sing]
-  (if-let [id (ffirst (q (get-query sing)
-                     (db conn)))]
-    (d/entity (db conn) id)
-    (transact-new conn sing)))
+  (let [genq (get-query sing)]
+    (println genq "\n " sing "\n \n")
+    (if-let [id (ffirst (q genq
+                         (db conn)))]
+      (d/entity (db conn) id)
+      (transact-new conn sing))))
+
+(defn transact-seq [conn seq]
+  (reduce (fn [acc x]
+            (transact-singleton
+             conn
+             (merge
+              (if-let [id (:db/id acc)]
+                {:list/tail id}
+                {})
+              {:list/head x})))
+          {}
+          (reverse seq)))
+
+(defn to-seq [e]
+  (when-not (nil? e)
+    (cons (:list/head e)
+          (lazy-seq (to-seq (:list/tail e))))))
 
 (defn new-db []
   (let [url (str "datomic:mem://ssa" (name (gensym)))]

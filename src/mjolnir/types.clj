@@ -183,7 +183,16 @@
     (llvm/FunctionType (llvm-type ret-type)
                        (llvm/map-parr llvm-type arg-types)
                        (count arg-types)
-                       false)))
+                       false))
+  IToDatoms
+  (-to-datoms [this conn]
+    (transact-singleton
+     conn
+     {:node/type :type.fn
+      :type.fn/return (:db/id (-to-datoms ret-type conn))
+      :type.fn/arguments (:db/id (transact-seq conn
+                                               (map #(:db/id ( -to-datoms % conn))
+                                                    arg-types)))})))
 
 
 (defn flatten-struct [tp]

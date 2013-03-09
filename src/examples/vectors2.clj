@@ -3,7 +3,7 @@
   (:require [criterium.core :as crit])
   (:require [mjolnir.constructors-init :as const]
             [mjolnir.types :as types :refer [I8* Int64 Float64 Float64x4 Float64x4*]]
-            [mjolnir.expressions :refer [build pdebug optimize dump ->ConstVector]]
+            [mjolnir.expressions :refer [build optimize dump ->ConstVector]]
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr])
@@ -101,7 +101,7 @@
                              (c/recur (c/+ idx 1)
                                       -> Float64x4*))
                        v))))
-(def mjolnir-dll
+#_(def mjolnir-dll
   (let [target (config/default-target)
         m (c/module ['examples.vectors2
                      'mjolnir.intrinsics/llvm-sqrt-f64])
