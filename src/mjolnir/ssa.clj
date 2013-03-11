@@ -18,14 +18,25 @@
 
 (def kw->attrs
   {:one [:db/cardinality :db.cardinality/one]
+   :many [:db/cardinality :db.cardinalty/many]
    :ref [:db/valueType :db.type/ref]
    :keyword [:db/valueType :db.type/keyword]
-   :int [:db/valueType :db.type/long]})
+   :int [:db/valueType :db.type/long]
+   :string [:db/valueType :db.type/string]
+   :unique [:db/unique :db.unique/value]})
 
 
 (defn default-schema []
   {:list/tail #{:one :ref}
    :fn/type #{:one :ref}
+   :fn/argument-names #{:one :ref}
+   :fn/name #{:one :string}
+   :fn/body #{:one :ref}
+
+   :const/int-value #{:one :int}
+   
+   :argument/name #{:one :string}
+   :argument/idx #{:one :int}
 
    :type.fn/return #{:one :ref}
    :type.fn/arguments #{:one :ref}
@@ -33,6 +44,8 @@
    :list/head #{:one :ref} 
 
    :node/type #{:one :keyword}
+   :node/return-type #{:one :ref}
+   
    :type/width #{:one :int}
 
    :type/element-type #{:one :ref}

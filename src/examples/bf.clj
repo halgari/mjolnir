@@ -96,8 +96,7 @@
   [ip code]
   (let [ip_name (name (gensym "ip_"))
         {ret-code :code ret-ip :ip}
-        (compile-block (exp/->Local ip_name) (next code))
-        ]
+        (compile-block (exp/->Local ip_name) (next code))]
     
     {:ip (exp/->Loop [[ip_name ip]]
                      (c/if (c/is (c/aget cells (exp/->Local ip_name)) Zero8)
@@ -119,7 +118,7 @@
                                  (loop [ip 0
                                         code program-code]
                                    (let [{ip :ip code :code} (compile-bf ip code)]
-                                     #_(println "::::: " code)
+
                                      (if code
                                        (recur ip code)
                                        ip)))))]
