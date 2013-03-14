@@ -29,7 +29,7 @@
     (if (= \] (first code))
       {:code (next code)
        :ip ip}
-      (let [c (compile-bf ip code)]'
+      (let [c (compile-bf ip code)]
         (recur (:ip c)
                (:code c))))))
 

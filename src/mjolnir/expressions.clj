@@ -333,22 +333,22 @@
                                                                 (:linkage this))))
       (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl))
-  ssa/IToDatoms
-  (ssa/-to-datoms [this conn]
-    (let [tp (ssa/-to-datoms type conn)
-          arg-ids (map #(-> (ssa/transact-new conn
-                                              {:argument/name %2
-                                               :argument/idx %1})
-                            :db/id)
-                       (range)
-                       arg-names)
-          names (ssa/transact-seq conn arg-ids)
-          body-id (-> (ssa/-to-datoms body conn)
-                      :db/id)]
-      {:fn/type (:db/id tp)
-       :fn/name name
-       :fn/argument-names names
-       :fn/body body-id})))
+  #_(comment ssa/IToDatoms
+           (ssa/-to-datoms [this conn]
+                           (let [tp (ssa/-to-datoms type conn)
+                                 arg-ids (map #(-> (ssa/transact-new conn
+                                                                     {:argument/name %2
+                                                                      :argument/idx %1})
+                                                   :db/id)
+                                              (range)
+                                              arg-names)
+                                 names (ssa/transact-seq conn arg-ids)
+                                 body-id (-> (ssa/-to-datoms body conn)
+                                             :db/id)]
+                             {:fn/type (:db/id tp)
+                              :fn/name name
+                              :fn/argument-names names
+                              :fn/body body-id}))))
 
 (defrecord Module [name body]
   Validatable  
@@ -989,16 +989,16 @@
     *int-type*)
   (build [this]
     (encode-const *int-type* this))
-  ssa/IToDatoms
-  (ssa/-to-datoms [this conn]
-    (ssa/transact-new
-     conn
-     {:node/type :type/const
-      :const/int-value this
-      :node/return-type (-> (ssa/-to-datoms
-                             *int-type*
-                             conn)
-                            :db/id)})))
+  #_ (comment ssa/IToDatoms
+              (ssa/-to-datoms [this conn]
+                              (ssa/transact-new
+                               conn
+                               {:node/type :type/const
+                                :const/int-value this
+                                :node/return-type (-> (ssa/-to-datoms
+                                                       *int-type*
+                                                       conn)
+                                                      :db/id)}))))
 
 (extend-type java.lang.Double
   Validatable
@@ -1010,15 +1010,15 @@
     *float-type*)
   (build [this]
     (encode-const *float-type* this))
-  ssa/IToDatoms
-  (ssa/-to-datoms [this conn]
-    (ssa/transact-new
-     conn
-     {:node/type :type/const
-      :node/return-type (-> (ssa/-to-datoms
-                             *float-type*
-                             conn)
-                            :db/id)})))
+  #_ (comment ssa/IToDatoms
+              (ssa/-to-datoms [this conn]
+                              (ssa/transact-new
+                               conn
+                               {:node/type :type/const
+                                :node/return-type (-> (ssa/-to-datoms
+                                                       *float-type*
+                                                       conn)
+                                                      :db/id)}))))
 
 
 

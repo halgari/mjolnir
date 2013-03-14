@@ -103,24 +103,26 @@
                              (c/recur (c/+ idx 1)
                                       -> Float64x4*))
                        v))))
-(def mjolnir-dll
-  (config/with-config [Int64 Float64 (config/default-target)]
-    (let [m (c/module ['examples.vectors
-                       'mjolnir.intrinsics/llvm-sqrt-f64])
-          built (optimize (build m))
-          bf (emit-to-file config/*target*
-                           built {:filename "vectors2.s"
-                                  :output-type :asm
-                                  :cpu :core-avx-i})
-          _ (dump built)
-          dll (as-dll config/*target*
-                      built
-                      {:verbose true
-                       :cpu :core-avx-i})]
-      dll)))
 
-(def fn-create-buffer (get mjolnir-dll mj-create-buffer))
-(def fn-mj-normalize (get mjolnir-dll mj-normalize))
+(defn init []
+  (def mjolnir-dll
+    (config/with-config [Int64 Float64 (config/default-target)]
+      (let [m (c/module ['examples.vectors
+                         'mjolnir.intrinsics/llvm-sqrt-f64])
+            built (optimize (build m))
+            bf (emit-to-file config/*target*
+                             built {:filename "vectors2.s"
+                                    :output-type :asm
+                                    :cpu :core-avx-i})
+            _ (dump built)
+            dll (as-dll config/*target*
+                        built
+                        {:verbose true
+                         :cpu :core-avx-i})]
+        dll)))
+
+  (def fn-create-buffer (get mjolnir-dll mj-create-buffer))
+  (def fn-mj-normalize (get mjolnir-dll mj-normalize)))
 
 
 (comment

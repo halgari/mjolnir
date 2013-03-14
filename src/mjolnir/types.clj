@@ -61,12 +61,12 @@
   ConstEncoder
   (encode-const [this val]
     (llvm/ConstInt (llvm-type this) val true))
-  IToDatoms
-  (-to-datoms [this conn]
-    (transact-singleton
-     conn
-     {:node/type :type.int
-      :type/width width})))
+  IToPlan
+  (-add-to-plan [this plan]
+    (-> plan
+        (singleton
+          {:node/type :type.int
+           :type/width width}))))
 
 
 (defrecord VoidType []
@@ -92,10 +92,10 @@
   ConstEncoder
   (encode-const [this val]
     (llvm/ConstReal (llvm-type this) val))
-  IToDatoms
-  (-to-datoms [this conn]
-    (transact-singleton
-     conn
+  IToPlan
+  (-add-to-plan [this plan]
+    (singleton
+     plan
      {:node/type :type.float
       :type/width width})))
 
@@ -128,12 +128,13 @@
               ng (llvm/GetNamedGlobal *module* nm)]
           (assert ng (str "Could not find global: " nm))
           ng))))
-  IToDatoms
-  (-to-datoms [this conn]
-    (transact-singleton
-     conn
-     {:node/type :type.pointer
-      :type/element-type (:db/id (-to-datoms etype conn))})))
+  IToPlan
+  (-add-to-plan [this plan]
+    (let [with-tp (add-to-plan plan etype)]
+      (singleton
+       with-tp
+       {:node/type :type.pointer
+        :type/element-type (plan-id with-tp etype)}))))
 
 
 
@@ -184,15 +185,17 @@
                        (llvm/map-parr llvm-type arg-types)
                        (count arg-types)
                        false))
-  IToDatoms
-  (-to-datoms [this conn]
-    (transact-singleton
-     conn
-     {:node/type :type.fn
-      :type.fn/return (:db/id (-to-datoms ret-type conn))
-      :type.fn/arguments (:db/id (transact-seq conn
-                                               (map #(:db/id ( -to-datoms % conn))
-                                                    arg-types)))})))
+  IToPlan
+  (-add-to-plan [this plan]
+    (let [with-types (reduce
+                      add-to-plan
+                      plan
+                      (cons ret-type arg-types))]
+      (singleton with-types
+                 {:node/type :type.fn
+                  :type.fn/return (plan-id with-types ret-type)
+                  :type.fn/arguments (map (partial plan-id with-types)
+                                          arg-types)}))))
 
 
 (defn flatten-struct [tp]

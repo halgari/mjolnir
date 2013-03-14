@@ -33,6 +33,11 @@
    :fn/name #{:one :string}
    :fn/body #{:one :ref}
 
+   :inst/block #{:one :ref}
+   :inst/next #{:one :ref}
+   :inst/type #{:one :keyword}
+   
+
    :const/int-value #{:one :int}
    
    :argument/name #{:one :string}
@@ -78,6 +83,47 @@
              (vector '?id k v))
            sing)])
 
+(defn find-singleton [db sing]
+  (println (get-query sing))
+  (ffirst (q (get-query sing) db)))
+
+(defrecord TxPlan [conn db singletons new-ents tempids])
+
+
+(defn new-plan [conn]
+  (->TxPlan conn (db conn) {} {} {}))
+
+(defn commit [{:keys [conn db new-ents]}]
+  (d/transact conn (map
+                    (fn [[ent id]]
+                      (assoc ent :db/id id))
+                    new-ents)))
+
+(defn plan-id 
+  [plan val]
+  (if-let [v (or (get-in plan [:singletons val])
+                   (get-in plan [:new-ents val]))]
+    v
+    (assert false (str "Can't find " val))))
+
+(defn singleton [plan sing]
+  (if (get-in plan [:singletons sing])
+    plan
+    (if-let [q (find-singleton (:db plan) sing)]
+      (assoc-in plan [:singletons sing] q)
+      (let [newid (d/tempid :db.part/user)]
+        (-> plan
+            (assoc-in [:singletons sing] newid)
+            (assoc-in [:new-ents sing] newid)
+            (assoc-in [:tempids newid] nil))))))
+
+(defn assert-entity [plan ent]
+  (let [newid (d/tempid :db.part/user)]
+        (-> plan
+            (assoc-in [:new-ents ent] nil)
+            (assoc-in [:tempids newid] nil))))
+
+
 (defn transact-new [conn ent]
   (let [ent (if-not (:db/id ent)
               (assoc ent :db/id (d/tempid :db.part/user))
@@ -107,6 +153,11 @@
           {}
           (reverse seq)))
 
+
+(defn new-block [conn fn]
+  (transact-new ))
+
+
 (defn to-seq [e]
   (when-not (nil? e)
     (cons (:list/head e)
@@ -120,15 +171,12 @@
       conn)))
 
 
-(defprotocol IToDatoms
-  (-to-datoms [this conn]
+(defprotocol IToPlan
+  (-add-to-plan [this plan]
     "assert this item as datoms into the db and return the id of this entity"))
 
-(defn to-datoms
-  ([d]
-     (-to-datoms d *db-conn*))
-  ([conn d]
-     (-to-datoms d conn)))
+(defn add-to-plan [plan ent]
+  (-add-to-plan ent plan))
 
 #_(defn -main []
   (to-datomic-schema (default-schema))

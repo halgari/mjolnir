@@ -119,7 +119,7 @@
 
 (defn gen-unwrap-fn [[wtp tpid attr vtp]]
   `(c/defn ~(symstr "unwrap-" wtp) [WObject* v# ~'-> ~vtp]
-     (c/get (c/bitcast v# (->PointerType ~wtp)) ~attr)))
+     (c/get (c/bitcast v# (->PointerType ~wtp)) ~attr)))  
 
 
 
