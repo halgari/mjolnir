@@ -333,22 +333,32 @@
                                                                 (:linkage this))))
       (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl))
-  #_(comment ssa/IToDatoms
-           (ssa/-to-datoms [this conn]
-                           (let [tp (ssa/-to-datoms type conn)
-                                 arg-ids (map #(-> (ssa/transact-new conn
-                                                                     {:argument/name %2
-                                                                      :argument/idx %1})
-                                                   :db/id)
-                                              (range)
-                                              arg-names)
-                                 names (ssa/transact-seq conn arg-ids)
-                                 body-id (-> (ssa/-to-datoms body conn)
-                                             :db/id)]
-                             {:fn/type (:db/id tp)
-                              :fn/name name
-                              :fn/argument-names names
-                              :fn/body body-id}))))
+  ssa/IToPlan
+  (ssa/-add-to-plan [this plan]
+    (let [args (map (fn [idx name]
+                      {:argument/name name
+                       :argument/idx idx})
+                    (range)
+                    arg-names)
+          with-nodes (reduce
+                      (fn [acc e]
+                        (ssa/assert-entity acc e e))
+                      (ssa/add-to-plan plan type)
+                      args)
+          [with-args names-id] (ssa/assert-seq with-nodes
+                                (map (partial ssa/plan-id with-nodes)
+                                     args))
+          with-this (ssa/assert-entity
+                     with-args
+                     {:fn/type (ssa/plan-id with-args type)
+                      :fn/name name
+                      :fn/argument-names names-id}
+                     this)
+          this-id (ssa/plan-id with-this this)
+          [with-block block-id] (ssa/add-entry-block with-this this-id)]
+      (binding [*fn* this-id]
+        (reset! *block* block-id))
+      with-block)))
 
 (defrecord Module [name body]
   Validatable  

@@ -1,5 +1,6 @@
 (ns mjolnir.ssa
-  (:require [datomic.api :refer [q db] :as d]))
+  (:require [datomic.api :refer [q db] :as d]
+            [clojure.pprint :refer [pprint]]))
 
 (def ^:dynamic *db-conn* nil)
 
@@ -32,11 +33,13 @@
    :fn/argument-names #{:one :ref}
    :fn/name #{:one :string}
    :fn/body #{:one :ref}
+   :fn/entry-block #{:one :ref}
 
    :inst/block #{:one :ref}
    :inst/next #{:one :ref}
    :inst/type #{:one :keyword}
    
+   :block/fn #{:one :ref}
 
    :const/int-value #{:one :int}
    
@@ -95,11 +98,15 @@
 
 (defn commit
   "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
-  [{:keys [conn db new-ents] :as plan}]
-  (let [data (map
-              (fn [[ent id]]
-                (assoc ent :db/id id))
-              new-ents)
+  [{:keys [conn db new-ents updates] :as plan}]
+  (let [data (concat (map
+                      (fn [[ent id]]
+                        (assoc ent :db/id id))
+                      new-ents)
+                     (map
+                      (fn [[e a v]]
+                        [:db/add e a v])
+                      updates))
         {:keys [db-before db-after tempids tx-data]}
         @(d/transact conn data)
         ptempids (zipmap
@@ -123,6 +130,11 @@
   [plan val]
   (d/entity (:db plan) (get-in plan [:tempids val])))
 
+(defn to-seq [head]
+  (when head
+    (cons (:list/head head)
+          (lazy-seq (to-seq (:list/tail head))))))
+
 (defn singleton [plan sing key]
   (if (get-in plan [:singletons sing])
     plan
@@ -137,8 +149,11 @@
 (defn assert-entity [plan ent key]
   (let [newid (d/tempid :db.part/user)]
         (-> plan
-            (assoc-in [:new-ents ent] nil)
+            (assoc-in [:new-ents ent] newid)
             (assoc-in [:tempids key] newid))))
+
+(defn update-entity [plan ent attr val]
+  (update-in plan [:updates] (fnil conj []) [ent attr val]))
 
 (defn- assert-node [[plan last] id]
   (let [ent (merge
@@ -154,6 +169,17 @@
   (reduce assert-node
           [plan nil]
           (reverse seq)))
+
+;; True ssa stuff here, blocks instructions etc.
+(defn add-block [plan fn]
+  (let [blk {:block/fn fn}
+        new-plan (assert-entity plan blk blk)]
+    [new-plan (plan-id new-plan blk)]))
+
+(defn add-entry-block [plan fn]
+  (let [[new-plan blk-id] (add-block plan fn)
+        with-update (update-entity new-plan fn :fn/entry-block blk-id)]
+    [with-update blk-id]))
 
 
 (defn new-db []
