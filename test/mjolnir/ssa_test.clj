@@ -78,54 +78,59 @@
           count)
       =>
       2
-      )
-    #_(fact "IntegerType will re-assert different widths"
-      (to-datoms Float64*) =not=> (to-datoms Float32*))
-    #_(fact "Element type matches"
-      (:type/element-type (to-datoms Float64*)) => (to-datoms Float64)))
+      ))
 
-  #_(let [ft (->FunctionType [Float64 Int64] Int64)]
+  (let [ft (->FunctionType [Float64 Int64] Int64)]
     (facts "FunctionType"
       (fact "FunctionType is singleton"
-        (to-datoms ft) => (to-datoms ft))
+        (-> (new-plan *db-conn*)
+            (add-to-plan ft)
+            (add-to-plan ft)
+            :new-ents
+            count)
+        =>
+        5)
       (fact "Functions have proper return types"
-        (:type.fn/return (to-datoms ft))
-        =>
-        (to-datoms Int64))
-      (fact "Functions have proper arguments"
-        (to-seq (:type.fn/arguments (to-datoms ft)))
-        =>
-        [(to-datoms Float64)
-         (to-datoms Int64)])))
+        (let [plan (-> (new-plan *db-conn*)
+                       (add-to-plan ft)
+                       commit)]
+          (:type.fn/return (plan-ent plan ft))
+          =>
+          (plan-ent plan Int64)))
+      #_(fact "Functions have proper arguments"
+          (to-seq (:type.fn/arguments (to-datoms ft)))
+          =>
+          [(to-datoms Float64)
+           (to-datoms Int64)])))
   
   #_(let [ft (->FunctionType [Int64] Int64)
-        f (->Fn "ret0" ft ["a" "b"]
-                0)]
-    (facts "Fn"
-      (fact "Functions create new entities each time"
-        (to-datoms f)
-        =not=>
-        (to-datoms f))
-      (fact "Functions with the same types are the same types"
-        (:fn/type (to-datoms f))
-        =>
-        (:fn/type (to-datoms f)))
-      (fact "Functions assert names"
-        (->> (to-datoms f)
-             :fn/argument-names
-             to-seq
-             (map :argument/name))
-        =>
-        ["a" "b"])
-      (fact "Functions assert indexes"
-        (->> (to-datoms f)
-             :fn/argument-names
-             to-seq
-             (map :argument/idx))
-        =>
-        [0 1])))
+          f (->Fn "ret0" ft ["a" "b"]
+                  0)]
+      (facts "Fn"
+        (fact "Functions create new entities each time"
+          (to-datoms f)
+          =not=>
+          (to-datoms f))
+        (fact "Functions with the same types are the same types"
+          (:fn/type (to-datoms f))
+          =>
+          (:fn/type (to-datoms f)))
+        (fact "Functions assert names"
+          (->> (to-datoms f)
+               :fn/argument-names
+               to-seq
+               (map :argument/name))
+          =>
+          ["a" "b"])
+        (fact "Functions assert indexes"
+          (->> (to-datoms f)
+               :fn/argument-names
+               to-seq
+               (map :argument/idx))
+          =>
+          [0 1])))
   #_(facts "Long"
-    (fact "Can be transacted"
-      (:const/int-value (to-datoms 0))
-      =>
-      0)))
+      (fact "Can be transacted"
+        (:const/int-value (to-datoms 0))
+        =>
+        0)))

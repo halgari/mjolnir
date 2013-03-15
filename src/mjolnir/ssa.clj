@@ -93,20 +93,37 @@
 (defn new-plan [conn]
   (->TxPlan conn (db conn) {} {} {}))
 
-(defn commit [{:keys [conn db new-ents]}]
-  (d/transact conn (map
-                    (fn [[ent id]]
-                      (assoc ent :db/id id))
-                    new-ents)))
+(defn commit
+  "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
+  [{:keys [conn db new-ents] :as plan}]
+  (let [data (map
+              (fn [[ent id]]
+                (assoc ent :db/id id))
+              new-ents)
+        {:keys [db-before db-after tempids tx-data]}
+        @(d/transact conn data)
+        ptempids (zipmap
+                  (keys (:tempids plan))
+                  (map (partial d/resolve-tempid db-after tempids)
+                       (vals (:tempids plan))))]
+    (assoc plan
+      :tempids ptempids
+      :db db-after
+      :db-before db-before
+      :new-ents nil
+      :singletons nil)))
 
 (defn plan-id 
   [plan val]
-  (if-let [v (or (get-in plan [:singletons val])
-                   (get-in plan [:new-ents val]))]
+  (if-let [v (get-in plan [:tempids val])]
     v
     (assert false (str "Can't find " val))))
 
-(defn singleton [plan sing]
+(defn plan-ent
+  [plan val]
+  (d/entity (:db plan) (get-in plan [:tempids val])))
+
+(defn singleton [plan sing key]
   (if (get-in plan [:singletons sing])
     plan
     (if-let [q (find-singleton (:db plan) sing)]
@@ -115,53 +132,29 @@
         (-> plan
             (assoc-in [:singletons sing] newid)
             (assoc-in [:new-ents sing] newid)
-            (assoc-in [:tempids newid] nil))))))
+            (assoc-in [:tempids key] newid))))))
 
-(defn assert-entity [plan ent]
+(defn assert-entity [plan ent key]
   (let [newid (d/tempid :db.part/user)]
         (-> plan
             (assoc-in [:new-ents ent] nil)
-            (assoc-in [:tempids newid] nil))))
+            (assoc-in [:tempids key] newid))))
 
+(defn- assert-node [[plan last] id]
+  (let [ent (merge
+             (if last
+               {:list/tail last}
+               {})
+             {:list/head id})
+        new-plan (singleton plan ent ent)
+        new-id (plan-id new-plan ent)]
+    [new-plan new-id]))
 
-(defn transact-new [conn ent]
-  (let [ent (if-not (:db/id ent)
-              (assoc ent :db/id (d/tempid :db.part/user))
-              ent)
-        {:keys [db-after tempids]} @(d/transact conn [ent])
-        tid (:db/id ent)]
-    (->> (d/resolve-tempid db-after tempids tid)
-         (d/entity db-after))))
-
-(defn transact-singleton [conn sing]
-  (let [genq (get-query sing)]
-    (println genq "\n " sing "\n \n")
-    (if-let [id (ffirst (q genq
-                         (db conn)))]
-      (d/entity (db conn) id)
-      (transact-new conn sing))))
-
-(defn transact-seq [conn seq]
-  (reduce (fn [acc x]
-            (transact-singleton
-             conn
-             (merge
-              (if-let [id (:db/id acc)]
-                {:list/tail id}
-                {})
-              {:list/head x})))
-          {}
+(defn assert-seq [plan seq]
+  (reduce assert-node
+          [plan nil]
           (reverse seq)))
 
-
-(defn new-block [conn fn]
-  (transact-new ))
-
-
-(defn to-seq [e]
-  (when-not (nil? e)
-    (cons (:list/head e)
-          (lazy-seq (to-seq (:list/tail e))))))
 
 (defn new-db []
   (let [url (str "datomic:mem://ssa" (name (gensym)))]

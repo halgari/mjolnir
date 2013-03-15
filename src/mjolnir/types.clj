@@ -66,7 +66,8 @@
     (-> plan
         (singleton
           {:node/type :type.int
-           :type/width width}))))
+           :type/width width}
+          this))))
 
 
 (defrecord VoidType []
@@ -97,7 +98,8 @@
     (singleton
      plan
      {:node/type :type.float
-      :type/width width})))
+      :type/width width}
+     this)))
 
 (defn float-type? [tp]
   (instance? FloatType tp))
@@ -134,7 +136,8 @@
       (singleton
        with-tp
        {:node/type :type.pointer
-        :type/element-type (plan-id with-tp etype)}))))
+        :type/element-type (plan-id with-tp etype)}
+       this))))
 
 
 
@@ -190,12 +193,15 @@
     (let [with-types (reduce
                       add-to-plan
                       plan
-                      (cons ret-type arg-types))]
-      (singleton with-types
+                      (cons ret-type arg-types))
+          [with-seq arg-id] (assert-seq with-types
+                                        (map (partial plan-id with-types)
+                                             arg-types))]
+      (singleton with-seq
                  {:node/type :type.fn
-                  :type.fn/return (plan-id with-types ret-type)
-                  :type.fn/arguments (map (partial plan-id with-types)
-                                          arg-types)}))))
+                  :type.fn/return (plan-id with-seq ret-type)
+                  :type.fn/arguments arg-id}
+                 this))))
 
 
 (defn flatten-struct [tp]
