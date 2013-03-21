@@ -18,6 +18,9 @@
 (defn Expression? [this]
   (extends? Expression (type this)))
 
+(defprotocol SSAWriter
+  (write-ssa [this plan]))
+
 
 (defrecord ConstInteger [value type]
   Validatable
@@ -42,6 +45,10 @@
                                   (map build vals))
                       (count vals))))
 
+(defn- const-data [val]
+  (cond
+   (integer? val) {:const/int-value val}))
+
 (defrecord Const [type val]
   Validatable
   (validate [this]
@@ -50,7 +57,17 @@
   (return-type [this]
     type)
   (build [this]
-    (encode-const type val)))
+    (encode-const type val))
+  #_SSAWriter
+  #_(write-ssa [this plan]
+    (let [with-type (ssa/add-to-plan plan type)
+          with-const (ssa/add-instruction with-type
+                                          :inst.type/const
+                                          this
+                                          (merge
+                                           (const-data val)
+                                           {:const/type (ssa/plan-id with-type type)}))]
+      [with-const (ssa/plan-id with-const this)])))
 
 (defrecord BitCast [ptr tp]
   Validatable
@@ -333,8 +350,23 @@
                                                                 (:linkage this))))
       (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl))
-  ssa/IToPlan
-  (ssa/-add-to-plan [this plan]
+  #_ssa/IToPlan
+  #_(ssa/-add-to-plan [this plan]
+    (gen-plan
+      [args (assert-all (map (fn [idx name]
+                               (let [a {:argument/name name
+                                        :argument/idx idx}]
+                                 [a a]))
+                             (range)
+                             arg-names))
+       head-node (assert-seq args)
+       fn-id (assert-entity {:node/type :node.type/fn
+                              :fn/type (ssa/plan-id with-args type)
+                              :fn/name name
+                             :fn/argument-names head-node})
+       block-id (add-entry-block fn-id)
+       body-id (write-ssa body block-id)]
+      [fn-id])
     (let [args (map (fn [idx name]
                       {:argument/name name
                        :argument/idx idx})
@@ -346,19 +378,20 @@
                       (ssa/add-to-plan plan type)
                       args)
           [with-args names-id] (ssa/assert-seq with-nodes
-                                (map (partial ssa/plan-id with-nodes)
-                                     args))
+                                               (map (partial ssa/plan-id with-nodes)
+                                                    args))
           with-this (ssa/assert-entity
                      with-args
-                     {:fn/type (ssa/plan-id with-args type)
+                     {:node/type :node.type/fn
+                      :fn/type (ssa/plan-id with-args type)
                       :fn/name name
                       :fn/argument-names names-id}
                      this)
           this-id (ssa/plan-id with-this this)
           [with-block block-id] (ssa/add-entry-block with-this this-id)]
       (binding [*fn* this-id]
-        (reset! *block* block-id))
-      with-block)))
+        (let [[with-body body-id] (write-ssa body (ssa/set-block with-block block-id))]
+          (ssa/add-instruction with-body :inst.type/return-value {:return this} {:inst/return-value body-id}))))))
 
 (defrecord Module [name body]
   Validatable  
@@ -999,16 +1032,9 @@
     *int-type*)
   (build [this]
     (encode-const *int-type* this))
-  #_ (comment ssa/IToDatoms
-              (ssa/-to-datoms [this conn]
-                              (ssa/transact-new
-                               conn
-                               {:node/type :type/const
-                                :const/int-value this
-                                :node/return-type (-> (ssa/-to-datoms
-                                                       *int-type*
-                                                       conn)
-                                                      :db/id)}))))
+  SSAWriter
+  (write-ssa [this plan]
+    (write-ssa (->Const *int-type* this) plan)))
 
 (extend-type java.lang.Double
   Validatable

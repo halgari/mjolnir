@@ -14,13 +14,16 @@
 (defmacro validate-all [& body]
   `(apply valid? ~(vec body)))
 
-(defmacro assure-same-type [& body]
+#_(defmacro assure-same-type [& body]
   `(reduce (fn [a# x#]
              (assert (= a# x#)
                      (str "Expected same types, "
                       "at: " (pr-str (meta (:location ~'this)))
-                      " got: " (pr-str ~(vec body)))))
-           ~(vec body)))
+                      " got: " (pr-str ~(vec body)))))e
+                      ~(vec body)))
+
+(defmacro assure-same-type [& args]
+  (identity 1))
 
 (defprotocol Validatable
   (validate [this]))
@@ -62,12 +65,13 @@
   (encode-const [this val]
     (llvm/ConstInt (llvm-type this) val true))
   IToPlan
-  (-add-to-plan [this plan]
-    (-> plan
-        (singleton
-          {:node/type :type.int
-           :type/width width}
-          this))))
+  (add-to-plan [this]
+    (gen-plan
+     [this-id (singleton
+               {:node/type :type/int
+                :type/width width}
+               this)]
+     this-id)))
 
 
 (defrecord VoidType []
@@ -94,12 +98,13 @@
   (encode-const [this val]
     (llvm/ConstReal (llvm-type this) val))
   IToPlan
-  (-add-to-plan [this plan]
-    (singleton
-     plan
-     {:node/type :type.float
-      :type/width width}
-     this)))
+  (add-to-plan [this]
+    (gen-plan
+     [id (singleton
+          {:node/type :type.float
+           :type/width width}
+          this)]
+     id)))
 
 (defn float-type? [tp]
   (instance? FloatType tp))
@@ -131,13 +136,13 @@
           (assert ng (str "Could not find global: " nm))
           ng))))
   IToPlan
-  (-add-to-plan [this plan]
-    (let [with-tp (add-to-plan plan etype)]
-      (singleton
-       with-tp
-       {:node/type :type.pointer
-        :type/element-type (plan-id with-tp etype)}
-       this))))
+  (add-to-plan [this]
+    (gen-plan
+     [tp (add-to-plan etype)
+      this-id (singleton {:node/type :type.pointer
+                          :type/element-type tp}
+                         this)]
+     this-id)))
 
 
 
@@ -189,19 +194,16 @@
                        (count arg-types)
                        false))
   IToPlan
-  (-add-to-plan [this plan]
-    (let [with-types (reduce
-                      add-to-plan
-                      plan
-                      (cons ret-type arg-types))
-          [with-seq arg-id] (assert-seq with-types
-                                        (map (partial plan-id with-types)
-                                             arg-types))]
-      (singleton with-seq
-                 {:node/type :type.fn
-                  :type.fn/return (plan-id with-seq ret-type)
-                  :type.fn/arguments arg-id}
-                 this))))
+  (add-to-plan [this]
+    (gen-plan
+     [args (add-all (map add-to-plan arg-types))
+      ret (add-to-plan ret-type)
+      seq (assert-seq args)
+      this-id (singleton {:node/type :type.fn
+                          :type.fn/return ret
+                          :type.fn/arguments seq}
+                         this)]
+     this-id)))
 
 
 (defn flatten-struct [tp]
