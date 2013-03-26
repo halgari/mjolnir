@@ -199,7 +199,7 @@
      [args (add-all (map add-to-plan arg-types))
       ret (add-to-plan ret-type)
       seq (assert-seq args)
-      this-id (singleton {:node/type :type.fn
+      this-id (singleton {:node/type :type/fn
                           :type.fn/return ret
                           :type.fn/arguments seq}
                          this)]

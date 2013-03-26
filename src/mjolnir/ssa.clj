@@ -43,10 +43,16 @@
    :inst/next #{:one :ref}
    :inst/type #{:one :keyword}
 
+   :phi/block #{:one :ref}
+   :phi.value/node #{:one :ref}
+   :phi.value/block #{:one :ref}
+   :phi.value/value #{:one :ref}
+
    :inst/return-value #{:one :ref}
    
    :block/fn #{:one :ref}
-
+   :block/terminator-inst #{:one :keyword}
+   
    :const/int-value #{:one :int}
    :const/type #{:one :ref}
    
@@ -68,12 +74,27 @@
    :error/key #{:one :keyword}
    :error/calue #{:one :string}
 
+   :inst.binop/type #{:one :keyword}
+   :inst.argument/idx #{:one :int}
+
+   ;; args
+   :inst.arg/arg0 #{:one :ref}
+   :inst.arg/arg1 #{:one :ref}
    })
+
+(def bin-ops
+  #{:inst.binop/+})
 
 (defn error-messages []
   {:error.fn/return-type-match "Return instructions must return the same type as their eclosing function"})
 
 ;; rules
+
+(def global-defs
+  '[[(global-def ?id)
+     [?id :node/type :node.type/fn]]
+    [(global-def ?id)
+     [?id :node/type :node.type/fn]]])
 
 (def error-message-rules
   '[[(error-message ?id ?err)
@@ -98,6 +119,9 @@
       (return-type ?ref ?type)
       [(not= ?type ?ret-type)]
       [["Return instruction types must match function return type"] [?err]]]]))
+
+(def ssa-rules
+  (concat global-defs))
 
 (defn assert-schema [conn desc]
   (->> (for [[id attrs] desc]
@@ -201,14 +225,14 @@
      [[] plan]
      itms)))
 
-(defn assert-all [ents keys]
+(defn assert-all [ents]
   (fn [plan]
     (reduce
      (fn [[ids plan] [ent key]]
        (let [[id plan] ((assert-entity ent key) plan)]
             [(conj ids id) plan]))
      [[] plan]
-     (map vector ents keys))))
+     ents)))
 
 (defn- with-bind [id expr psym body]
   `(fn [~psym]
@@ -226,6 +250,22 @@
            (reverse binds))]
     `(fn [~psym]
        ~f)))
+
+(defn assoc-plan [key val]
+  (fn [plan]
+    [nil (assoc plan key val)]))
+
+(defn assoc-in-plan [path val]
+  (fn [plan]
+    [nil (assoc-in plan path val)]))
+
+(defn get-in-plan [path]
+  (fn [plan]
+    [(get-in plan path) plan]))
+
+(defn no-op []
+  (fn [plan]
+    [nil plan]))
 
 (defn get-plan [planval conn]
   (assert (ifn? planval))
@@ -252,35 +292,83 @@
      (reverse seq))))
 
 ;; True ssa stuff here, blocks instructions etc.
-(defn add-block [plan fn]
-  (let [blk {:block/fn fn}
-        new-plan (assert-entity plan blk blk)]
-    [new-plan (plan-id new-plan blk)]))
+(defn add-block [fn]
+  (let [blk {:block/fn fn}]
+    (gen-plan
+     [blk (assert-entity blk blk)]
+     blk)))
 
 (defn set-block [plan block-id]
   (assoc plan :block-id block-id))
 
-(defn add-entry-block [plan fn]
-  (let [[new-plan blk-id] (add-block plan fn)
-        with-update (update-entity new-plan fn :fn/entry-block blk-id)]
-    [with-update blk-id]))
+(defn add-entry-block [fn]
+  (gen-plan
+   [blk (add-block fn)
+    _ (assoc-plan :block-id blk)
+    _ (update-entity fn :fn/entry-block blk)]
+   blk))
+
+(defn get-block []
+  (fn [plan]
+    [(:block-id plan) plan]))
+
+(defn add-phi
+  "Adds a phi node to a block. In Mjolnir phi nodes are always attached to the start of a block.
+The order of the nodes cannot be set, as it shouldn't matter in the output seimantics of the code"
+  []
+  (gen-plan
+   [block (get-block)
+    phi-id (assert-entity {:node/type :node.type/phi})]
+   phi-id))
+
+(defn add-to-phi
+  "adds an incomming value to a phi node"
+  [phi-node block-id value]
+  (gen-plan
+   [val (assert-entity {:phi.value/node phi-node
+                        :phi.value/block block-id
+                        :phi.value/value value})]
+   val))
+
+(defn terminate-block
+  "Sets the terminator instruction for a block"
+  [inst & args]
+  (gen-plan
+   [block (get-block)
+    _ (update-entity block :block/termination-instr inst)]
+   block))
 
 (defn add-instruction
-  ([{:keys [block-id prev-instruction-id] :as plan} instruction key attrs-map]
-     (add-instruction plan block-id prev-instruction-id instruction key attrs-map))
-  ([plan block-id prev-instruction-id instruction key attrs-map]
-     (let [after-inst (assert-entity
-                       plan
-                       (merge
-                        {:inst/block block-id
-                         :inst/type instruction}
-                        attrs-map)
+  ([instruction attrs-map key]
+     (fn [{:keys [prev-instruction-id block-id] :as plan}]
+       ((add-instruction block-id prev-instruction-id instruction attrs-map key) plan)))
+  ([block-id prev-instruction-id instruction attrs-map key]
+     (gen-plan
+      [inst-id (assert-entity
+                (merge
+                 {:inst/block block-id
+                  :inst/type instruction}
+                 attrs-map)
                        key)
-           inst-id (plan-id after-inst key)]
-       (-> (if prev-instruction-id
-             (update-entity after-inst prev-instruction-id :inst/next inst-id)
-             after-inst)
-           (assoc :prev-instruction-id inst-id)))))
+       _ (if prev-instruction-id
+           (update-entity prev-instruction-id :inst/next inst-id)
+           (no-op))
+       _ (assoc-plan :prev-instruction-id inst-id)]
+      inst-id)))
+
+(defn instruction-seq [block]
+  ;; Get all the instructions, bounce up to the top, then return a seq
+  ;; of all
+  (->> (:inst/_block block)
+       (map d/touch)
+       debug
+       first
+       (iterate (comp first :inst/_next))
+       (take-while (complement nil?))
+       (debug)
+       last
+       (iterate :inst/next)
+       (take-while (complement nil?))))
 
 
 (defn validation-errors [db]

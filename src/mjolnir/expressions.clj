@@ -1,6 +1,6 @@
 (ns mjolnir.expressions
   (:require [mjolnir.types :refer :all]
-            [mjolnir.ssa :as ssa]
+            [mjolnir.ssa :as ssa :refer :all]
             [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
             [clojure.java.shell :as shell]
@@ -19,7 +19,7 @@
   (extends? Expression (type this)))
 
 (defprotocol SSAWriter
-  (write-ssa [this plan]))
+  (write-ssa [this]))
 
 
 (defrecord ConstInteger [value type]
@@ -58,16 +58,16 @@
     type)
   (build [this]
     (encode-const type val))
-  #_SSAWriter
-  #_(write-ssa [this plan]
-    (let [with-type (ssa/add-to-plan plan type)
-          with-const (ssa/add-instruction with-type
-                                          :inst.type/const
-                                          this
-                                          (merge
-                                           (const-data val)
-                                           {:const/type (ssa/plan-id with-type type)}))]
-      [with-const (ssa/plan-id with-const this)])))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp (add-to-plan type)
+      const (add-instruction :inst.type/const
+                             (merge
+                              (const-data val)
+                              {:const/type tp})
+                             key)]
+     const)))
 
 (defrecord BitCast [ptr tp]
   Validatable
@@ -234,6 +234,16 @@
 (defprotocol NamedExpression
   (get-name [this]))
 
+
+(defrecord Arg [idx]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [this-id (add-instruction :inst.type/argument
+                               {:inst.argument/idx idx}
+                               this)]
+     this-id)))
+
 (defrecord Argument [idx tp]
   Validatable
   (validate [this]
@@ -242,7 +252,13 @@
   (return-type [this]
     tp)
   (build [this]
-    (build (argument *fn* idx))))
+    (build (argument *fn* idx)))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [this-id (add-instruction :inst.type/argument
+                               {:inst.argument/idx idx})]
+     this-id)))
 
 (defrecord FnArgument [arg-name arg-idx arg-type]
     Validatable
@@ -278,6 +294,8 @@
       (assert val (str "Global not found " (full-name name)))
       val)))
 
+(defrecord Gbl [name])
+
 (defrecord SizeOf [tp]
   Validatable
   (validate [this]
@@ -288,7 +306,27 @@
   (build [this]
     (llvm/SizeOf (llvm-type tp))))
 
+(def binop-maps
+  {:+ :inst.binop/+
+   :< :inst.binop/<
+   :<= :inst.bindop/<=
+   :- :inst.bindop/-})
 
+
+
+(defrecord Binop [op lh rh]
+  SSAWriter
+  (write-ssa [this]
+    (assert (binop-maps op) (str "Invalid binop"))
+    (gen-plan
+     [lh-id (write-ssa lh)
+      rh-id (write-ssa rh)
+      inst (add-instruction :inst.type/binop
+                            {:inst.arg/arg0 lh-id
+                             :inst.arg/arg1 rh-id
+                             :inst.binop/type :inst.binop.type/+}
+                            this)]
+     inst)))
 
 
 (defprotocol GlobalExpression
@@ -350,48 +388,31 @@
                                                                 (:linkage this))))
       (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
       gbl))
-  #_ssa/IToPlan
-  #_(ssa/-add-to-plan [this plan]
+  IToPlan
+  (add-to-plan [this]
     (gen-plan
-      [args (assert-all (map (fn [idx name]
-                               (let [a {:argument/name name
-                                        :argument/idx idx}]
-                                 [a a]))
-                             (range)
-                             arg-names))
-       head-node (assert-seq args)
-       fn-id (assert-entity {:node/type :node.type/fn
-                              :fn/type (ssa/plan-id with-args type)
-                              :fn/name name
-                             :fn/argument-names head-node})
-       block-id (add-entry-block fn-id)
-       body-id (write-ssa body block-id)]
-      [fn-id])
-    (let [args (map (fn [idx name]
-                      {:argument/name name
-                       :argument/idx idx})
-                    (range)
-                    arg-names)
-          with-nodes (reduce
-                      (fn [acc e]
-                        (ssa/assert-entity acc e e))
-                      (ssa/add-to-plan plan type)
-                      args)
-          [with-args names-id] (ssa/assert-seq with-nodes
-                                               (map (partial ssa/plan-id with-nodes)
-                                                    args))
-          with-this (ssa/assert-entity
-                     with-args
-                     {:node/type :node.type/fn
-                      :fn/type (ssa/plan-id with-args type)
-                      :fn/name name
-                      :fn/argument-names names-id}
-                     this)
-          this-id (ssa/plan-id with-this this)
-          [with-block block-id] (ssa/add-entry-block with-this this-id)]
-      (binding [*fn* this-id]
-        (let [[with-body body-id] (write-ssa body (ssa/set-block with-block block-id))]
-          (ssa/add-instruction with-body :inst.type/return-value {:return this} {:inst/return-value body-id}))))))
+     [old-fn (get-in-plan [:state :fn])
+      type-id (add-to-plan type)
+      args (assert-all (map (fn [idx name]
+                              (let [a {:argument/name name
+                                       :argument/idx idx}]
+                                [a a]))
+                            (range)
+                            arg-names))
+      head-node (assert-seq args)
+      fn-id (assert-entity {:node/type :node.type/fn
+                            :fn/type type-id
+                            :fn/name name
+                            :fn/argument-names head-node}
+                           this)
+      _ (assoc-in-plan [:state :fn] fn-id)
+      block-id (add-entry-block fn-id)
+      body-id (write-ssa body)
+      ret-id (add-instruction :inst.type/return-val
+                              {:inst.arg/arg0 body-id}
+                              nil)
+      _ (assoc-in-plan [:state :fn] old-fn)]
+     [fn-id])))
 
 (defrecord Module [name body]
   Validatable  
@@ -465,7 +486,38 @@
                           (into-array Pointer [elseval])
                           (into-array Pointer [post-elseblk])
                           1))      
-      phi)))
+      phi))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [fnc (get-in-plan [:state :fn])
+
+      test-id (write-ssa test)
+      test-block (get-block)
+      
+      pre-then-block (add-block fnc)
+      then-val (write-ssa then)
+      post-then-block (get-block)
+      
+      pre-else-block (add-block fnc)
+      else-val (write-ssa else)
+      post-else-block (get-block)
+
+      merge-block (add-block fnc)
+      phi-val (add-phi)
+
+      _ (set-block test-block)
+      br-id (terminate-block :br pre-then-block pre-else-block)
+      
+      _ (set-block post-then-block)
+      them-jmp-id (terminate-block :jmp merge-block)
+
+      _ (set-block post-else-block)
+      else-jmp-id (terminate-block :jmp merge-block)
+
+      _ (add-to-phi phi-val post-then-block then-val)
+      _ (add-to-phi phi-val post-else-block else-val)]
+     phi-val)))
 
 (defrecord Call [fn args]
   Validatable
@@ -1033,8 +1085,8 @@
   (build [this]
     (encode-const *int-type* this))
   SSAWriter
-  (write-ssa [this plan]
-    (write-ssa (->Const *int-type* this) plan)))
+  (write-ssa [this]
+    (write-ssa (->Const *int-type* this))))
 
 (extend-type java.lang.Double
   Validatable
@@ -1046,12 +1098,12 @@
     *float-type*)
   (build [this]
     (encode-const *float-type* this))
-  #_ (comment ssa/IToDatoms
-              (ssa/-to-datoms [this conn]
-                              (ssa/transact-new
+  #_ (comment IToDatoms
+              (-to-datoms [this conn]
+                              (transact-new
                                conn
                                {:node/type :type/const
-                                :node/return-type (-> (ssa/-to-datoms
+                                :node/return-type (-> (-to-datoms
                                                        *float-type*
                                                        conn)
                                                       :db/id)}))))
