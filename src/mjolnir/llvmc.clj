@@ -180,6 +180,7 @@
 (defnative Pointer LLVMBuildMalloc)
 (defnative Pointer LLVMSizeOf)
 (defnative Pointer LLVMConstNull)
+(defnative Pointer LLVMBuildBinOp)
 
 (defnative Pointer LLVMBuildExtractElement)
 (defnative Pointer LLVMBuildInsertElement)
@@ -333,6 +334,77 @@
    LLVMRealULE
    LLVMRealUNE
    LLVMRealPredicateTrue])
+
+(defenum LLVMOpcode
+  1
+  [;; Terminators Instructions
+   LLVMRet
+   LLVMBr
+   LLVMSwitch
+   LLVMIndirectBr
+   LLVMInvoke
+   _Removed
+   LLVMUnreachable
+
+   ;; Standard Binary Operators
+   LLVMAdd
+   LLVMFAdd
+   LLVMSub
+   LLVMFSub
+   LLVMMul
+   LLVMFMul
+   LLVMUDiv
+   LLVMSDiv
+   LLVMFDiv
+   LLVMURem
+   LLVMSRem
+   LLVMFRem
+   ;; Logical operators
+   LLVMShl
+   LLVMLShr
+   LLVMAShr
+   LLVMAnd
+   LLVMOr
+   LLVMXor
+   ;; Memory Operators
+   LLVMAlloca
+   LLVMLoad
+   LLVMStore
+   LLVMGetElementPtr
+   ;; Cast Operators
+   LLVMTruc
+   LLVMZExt
+   LLVMSExt
+   LLVMFPToUI
+   LLVMFPToSI
+   LLVMUIToFP
+   LLVMSIToFP
+   LLVMFPTrunc
+   LLVMFPExt
+   LLVMPtrToInt
+   LLVMIntToPtr
+   LLVMBitcast
+   ;; Other
+   LLVMICmp
+   LLVMFCmp
+   LLVMPHI
+   LLVMCall
+   LLVMSelect
+   LLVMUserOp1
+   LLVMUserOp2
+   LLVMVAArg
+   LLVMExtractElement
+   LLVMInsertElement
+   LLVMShuffleVector
+   LLVMExtractValue
+   LLVMInsertValue
+   ;; Atomics
+   LLVMFence
+   LLVMAtomicCmpXchg
+   LLVMAtomicRMW
+   ;; Exception handling
+   LLVMResume
+   LLVMLandingPad])
 
 (defnative Integer LLVMInitializeCppBackendTargetInfo)
 (defnative Integer LLVMInitializeCppBackendTarget)

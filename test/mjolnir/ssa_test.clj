@@ -179,15 +179,15 @@
                             f-id)
                            (get-plan *db-conn*)
                            commit
-                           (plan-ent f)))
+                           (plan-ent add-one)))
           fib (->Fn "fib" ft ["x"]
                     (->If (->Binop :<= (->Arg 0) 1)
                           (->Arg 0)
                           (->Binop :+
                                    (->Call (->Gbl "fib")
-                                           (->Binop :- (->Arg 0) 1))
+                                           [(->Binop :- (->Arg 0) 1)])
                                    (->Call (->Gbl "fib")
-                                           (->Binop :- (->Arg 0) 2)))))
+                                           [(->Binop :- (->Arg 0) 2)]))))
           add-fib (fn []
                     (-> (gen-plan
                          [f-id (add-to-plan fib)]
@@ -218,13 +218,15 @@
           (add-one-fn)
           =not=>
           nil)
-        (fact "Can add an add-one function"
+        (fact "Can build an add-one function"
           (do (add-one-fn)
-              (dump (build (db *db-conn*))))
+              (dump (build (db *db-conn*)))
+              ::pass)
           =>
-          nil)
+          ::pass)
         (fact "Can add fib function"
-          (do (add-fib))
+          (do (add-fib)
+              (dump (build (db *db-conn*))))
           =>
           nil)
         

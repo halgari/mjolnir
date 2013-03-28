@@ -77,10 +77,18 @@
    :inst.binop/type #{:one :keyword}
    :inst.argument/idx #{:one :int}
 
+   :inst.gbl/name #{:one :string}
+   :inst.call/fn #{:one :ref}
+
    ;; args
    :inst.arg/arg0 #{:one :ref}
    :inst.arg/arg1 #{:one :ref}
    })
+
+
+(def idx->arg
+  [:inst.arg/arg0
+   :inst.arg/arg1])
 
 (def bin-ops
   #{:inst.binop/+})
@@ -145,7 +153,7 @@
            sing)])
 
 (defn find-singleton [db sing]
-  (assert db)
+  (assert db (pr-str db))
   (ffirst (q (get-query sing) db)))
 
 (defrecord TxPlan [conn db singletons new-ents tempids])
@@ -155,16 +163,34 @@
 
 (defn commit
   "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
-  [{:keys [conn db new-ents updates] :as plan}]
+  [{:keys [conn db new-ents updates valid-ids] :as plan}]
   (assert (and conn db))
-  (let [data (concat (map
-                      (fn [[ent id]]
-                        (assoc ent :db/id id))
-                      new-ents)
-                     (map
-                      (fn [[e a v]]
-                        [:db/add e a v])
-                      updates))
+  (let [ents (reduce
+              (fn [acc [ent id]]
+                (assert (not (get acc id)) "Duplicate ids")
+                (assoc acc id (assoc ent :db/id id)))
+              {}
+              new-ents)
+        _ (assert (= (set (keys ents))
+                     (set (keys valid-ids)))
+                  (pr-str (count (set (keys ents)))
+                          (count (set (keys valid-ids)))
+                          (count new-ents)))
+        data (-> (reduce
+                  (fn [acc [k attr val]]
+                    (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
+                                                        k
+                                                        (get valid-ids k)
+                                                        " in "
+                                                        (keys valid-ids)))
+                    (assoc-in acc [k attr] val))
+                  ents
+                  updates)
+                 vals)
+        _ (do
+            (println "----------------------")
+            (debug data))
+        
         {:keys [db-before db-after tempids tx-data]}
         @(d/transact conn data)
         ptempids (zipmap
@@ -203,17 +229,24 @@
         [newid (-> plan
                    (assoc-in [:singletons sing] newid)
                    (assoc-in [:new-ents sing] newid)
-                   (assoc-in [:tempids key] newid))])))))
+                   (assoc-in [:tempids key] newid)
+                   (assoc-in [:valid-ids newid] newid))])))))
 
-(defn assert-entity [ent key]
-  (fn [plan]
-    (let [newid (d/tempid :db.part/user)]
-      [newid (-> plan
-                 (assoc-in [:new-ents ent] newid)
-                 (assoc-in [:tempids key] newid))])))
+(defn assert-entity
+  ([ent]
+     (assert-entity ent nil))
+  ([ent key]
+      (fn [plan]
+        (let [newid (d/tempid :db.part/user)
+              ent (assoc ent :db/id newid)]
+          [newid (-> plan
+                     (assoc-in [:new-ents ent] newid)
+                     (assoc-in [:tempids key] newid)
+                     (assoc-in [:valid-ids newid] newid))]))))
 
 (defn update-entity [ent attr val]
   (fn [plan]
+    (assert (get (:valid-ids plan) ent) (pr-str "Must give entity id" ent "=>" (:valid-ids plan)))
     [ent (update-in plan [:updates] (fnil conj []) [ent attr val])]))
 
 (defn add-all [itms]
@@ -237,6 +270,7 @@
 (defn- with-bind [id expr psym body]
   `(fn [~psym]
      (let [[~id ~psym] ( ~expr ~psym)]
+       (assert ~psym "Nill plan")
        ~body)))
 
 (defmacro gen-plan [binds id-expr]
@@ -298,14 +332,15 @@
      [blk (assert-entity blk blk)]
      blk)))
 
-(defn set-block [plan block-id]
-  (assoc plan :block-id block-id))
+(defn set-block [block-id]
+  (fn [plan]
+    [block-id (assoc plan :block-id block-id)]))
 
-(defn add-entry-block [fn]
+(defn add-entry-block [fn-id]
   (gen-plan
-   [blk (add-block fn)
+   [blk (add-block fn-id)
     _ (assoc-plan :block-id blk)
-    _ (update-entity fn :fn/entry-block blk)]
+    _ (update-entity fn-id :fn/entry-block blk)]
    blk))
 
 (defn get-block []
@@ -318,7 +353,7 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
   []
   (gen-plan
    [block (get-block)
-    phi-id (assert-entity {:node/type :node.type/phi})]
+    phi-id (assert-entity {:node/type :node.type/phi} nil)]
    phi-id))
 
 (defn add-to-phi
@@ -335,13 +370,15 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
   [inst & args]
   (gen-plan
    [block (get-block)
-    _ (update-entity block :block/termination-instr inst)]
+    _ (update-entity block :block/terminator-inst inst)]
    block))
 
 (defn add-instruction
   ([instruction attrs-map key]
-     (fn [{:keys [prev-instruction-id block-id] :as plan}]
-       ((add-instruction block-id prev-instruction-id instruction attrs-map key) plan)))
+     (fn [plan]
+       (let [block-id (:block-id plan)
+             prev-instruction-id (get-in plan [:block-states block-id :prev-instruction-id])]
+         ((add-instruction block-id prev-instruction-id instruction attrs-map key) plan))))
   ([block-id prev-instruction-id instruction attrs-map key]
      (gen-plan
       [inst-id (assert-entity
@@ -353,7 +390,7 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
        _ (if prev-instruction-id
            (update-entity prev-instruction-id :inst/next inst-id)
            (no-op))
-       _ (assoc-plan :prev-instruction-id inst-id)]
+       _ (assoc-in-plan [:block-states block-id :prev-instruction-id] inst-id)]
       inst-id)))
 
 (defn instruction-seq [block]
@@ -361,11 +398,9 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
   ;; of all
   (->> (:inst/_block block)
        (map d/touch)
-       debug
        first
        (iterate (comp first :inst/_next))
        (take-while (complement nil?))
-       (debug)
        last
        (iterate :inst/next)
        (take-while (complement nil?))))

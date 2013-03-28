@@ -292,9 +292,17 @@
                  (llvm/GetNamedFunction *module* (full-name name))
                  (llvm/GetNamedGlobal *module* (full-name name)))]
       (assert val (str "Global not found " (full-name name)))
+      
       val)))
 
-(defrecord Gbl [name])
+(defrecord Gbl [name]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [gbl (add-instruction :inst.type/gbl
+                           {:inst.gbl/name name}
+                           this)]
+     gbl)))
 
 (defrecord SizeOf [tp]
   Validatable
@@ -307,10 +315,10 @@
     (llvm/SizeOf (llvm-type tp))))
 
 (def binop-maps
-  {:+ :inst.binop/+
-   :< :inst.binop/<
-   :<= :inst.bindop/<=
-   :- :inst.bindop/-})
+  {:+ :inst.binop.type/+
+   :< :inst.binop.type/<
+   :<= :inst.binop.type/<=
+   :- :inst.binop.type/-})
 
 
 
@@ -324,7 +332,7 @@
       inst (add-instruction :inst.type/binop
                             {:inst.arg/arg0 lh-id
                              :inst.arg/arg1 rh-id
-                             :inst.binop/type :inst.binop.type/+}
+                             :inst.binop/type (binop-maps op)}
                             this)]
      inst)))
 
@@ -496,10 +504,12 @@
       test-block (get-block)
       
       pre-then-block (add-block fnc)
+      _ (set-block pre-then-block)
       then-val (write-ssa then)
       post-then-block (get-block)
       
       pre-else-block (add-block fnc)
+      _ (set-block pre-else-block)
       else-val (write-ssa else)
       post-else-block (get-block)
 
@@ -519,24 +529,39 @@
       _ (add-to-phi phi-val post-else-block else-val)]
      phi-val)))
 
-(defrecord Call [fn args]
+(defrecord Call [fnc args]
   Validatable
   (validate [this]
-    (valid? fn)
-    (assure (FunctionType? (return-type fn)))
+    (valid? fnc)
+    (assure (FunctionType? (return-type fnc)))
     (doseq [arg args]
       (assure (Expression? arg)))
-    (let [cnt (count (:arg-types (return-type fn)))]
+    (let [cnt (count (:arg-types (return-type fnc)))]
       (assure (= (count args) cnt))))
   Expression
   (return-type [this]
-    (:ret-type (return-type fn)))
+    (:ret-type (return-type fnc)))
   (build [this]
     (llvm/BuildCall *builder*
-                    (build fn)
+                    (build fnc)
                     (llvm/map-parr build args)
                     (count args)
-                    (genname "call_"))))
+                    (genname "call_")))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [fnc (write-ssa fnc)
+      lst (add-all (map write-ssa args))
+      call-id (add-instruction :inst.type/call
+                               (reduce
+                                (fn [acc [idx id]]
+                                  (assoc acc (idx->arg idx) id))
+                                {:inst.call/fn fnc}
+                                (map vector
+                                     (range)
+                                     lst))
+                               this)]
+     call-id)))
 
 (defrecord CallPointer [fn args]
   Validatable
