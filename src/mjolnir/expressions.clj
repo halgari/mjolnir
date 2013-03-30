@@ -525,6 +525,7 @@
       post-else-block (get-block)
 
       merge-block (add-block fnc)
+      _ (set-block merge-block)
       phi-val (add-phi)
 
       _ (set-block test-block)
