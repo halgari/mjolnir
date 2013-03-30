@@ -202,7 +202,16 @@
       this-id (singleton {:node/type :type/fn
                           :type.fn/return ret
                           :type.fn/arguments seq}
-                         this)]
+                         this)
+      _ (assert-all (map (fn [x idx]
+                           (let [t [{:fn.arg/type x
+                                     :fn.arg/idx idx
+                                     :fn.arg/fn this-id}
+                                    nil]]
+                             (println t)
+                             t))
+                      args
+                      (range)))]
      this-id)))
 
 

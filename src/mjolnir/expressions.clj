@@ -215,7 +215,20 @@
            (float-type? (return-type a)) [:float llvm/BuildFCmp]
            (vector-type? (return-type a)) [:float llvm/BuildFCmp])]
       (assert (pred (tp cmp-maps)) "Invalid predicate symbol")
-      (f *builder* (pred (tp cmp-maps)) (build a) (build b) (genname "cmp_")))))
+      (f *builder* (pred (tp cmp-maps)) (build a) (build b) (genname "cmp_"))))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp (add-to-plan Int1)
+      lh (write-ssa a)
+      rh (write-ssa b)
+      nd (add-instruction :inst.type/cmp
+                          {:node/return-type tp
+                           :inst.arg/arg0 lh
+                           :inst.arg/arg1 rh
+                           :inst.cmp/pred pred}
+                          nil)]
+     nd)))
 
 (defrecord Not [a]
   Validatable
@@ -239,8 +252,8 @@
   SSAWriter
   (write-ssa [this]
     (gen-plan
-     [this-id (add-instruction :inst.type/argument
-                               {:inst.argument/idx idx}
+     [this-id (add-instruction :inst.type/arg
+                               {:inst.arg/idx idx}
                                this)]
      this-id)))
 
@@ -400,7 +413,7 @@
   (add-to-plan [this]
     (gen-plan
      [old-fn (get-in-plan [:state :fn])
-      type-id (add-to-plan type)
+      type-id (add-to-plan type) 
       args (assert-all (map (fn [idx name]
                               (let [a {:argument/name name
                                        :argument/idx idx}]
@@ -416,9 +429,7 @@
       _ (assoc-in-plan [:state :fn] fn-id)
       block-id (add-entry-block fn-id)
       body-id (write-ssa body)
-      ret-id (add-instruction :inst.type/return-val
-                              {:inst.arg/arg0 body-id}
-                              nil)
+      ret-id (terminate-block :inst.type/return-val body-id)
       _ (assoc-in-plan [:state :fn] old-fn)]
      [fn-id])))
 
@@ -517,14 +528,15 @@
       phi-val (add-phi)
 
       _ (set-block test-block)
-      br-id (terminate-block :br pre-then-block pre-else-block)
+      br-id (terminate-block :inst.type/br test-id pre-then-block pre-else-block)
       
       _ (set-block post-then-block)
-      them-jmp-id (terminate-block :jmp merge-block)
+      them-jmp-id (terminate-block :inst.type/jmp merge-block)
 
       _ (set-block post-else-block)
-      else-jmp-id (terminate-block :jmp merge-block)
+      else-jmp-id (terminate-block :inst.type/jmp merge-block)
 
+      _ (set-block merge-block)
       _ (add-to-phi phi-val post-then-block then-val)
       _ (add-to-phi phi-val post-else-block else-val)]
      phi-val)))

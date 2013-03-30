@@ -39,6 +39,10 @@
    :fn/body #{:one :ref}
    :fn/entry-block #{:one :ref}
 
+   :fn.arg/type #{:one :ref}
+   :fn.arg/idx #{:one :int}
+   :fn.arg/fn #{:one :ref}
+
    :inst/block #{:one :ref}
    :inst/next #{:one :ref}
    :inst/type #{:one :keyword}
@@ -51,7 +55,7 @@
    :inst/return-value #{:one :ref}
    
    :block/fn #{:one :ref}
-   :block/terminator-inst #{:one :keyword}
+   :block/terminator-inst #{:one :ref}
    
    :const/int-value #{:one :int}
    :const/type #{:one :ref}
@@ -75,20 +79,24 @@
    :error/calue #{:one :string}
 
    :inst.binop/type #{:one :keyword}
-   :inst.argument/idx #{:one :int}
+   :inst.arg/idx #{:one :int}
 
    :inst.gbl/name #{:one :string}
    :inst.call/fn #{:one :ref}
 
+   :inst.cmp/pred #{:one :keyword}
+
    ;; args
    :inst.arg/arg0 #{:one :ref}
    :inst.arg/arg1 #{:one :ref}
+   :inst.arg/arg2 #{:one :ref}
    })
 
 
 (def idx->arg
   [:inst.arg/arg0
-   :inst.arg/arg1])
+   :inst.arg/arg1
+   :inst.arg/arg2])
 
 (def bin-ops
   #{:inst.binop/+})
@@ -97,6 +105,13 @@
   {:error.fn/return-type-match "Return instructions must return the same type as their eclosing function"})
 
 ;; rules
+
+(defmacro defrule [name args & body])
+
+(defrule global-def [?id]
+  [?id :node/type :node.type/fn])
+
+
 
 (def global-defs
   '[[(global-def ?id)
@@ -159,7 +174,7 @@
 (defrecord TxPlan [conn db singletons new-ents tempids])
 
 
-(defn new-plan [conn]  (->TxPlan conn (db conn) {} {} {}))
+#_(defn new-plan [conn]  )
 
 (defn commit
   "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
@@ -187,10 +202,8 @@
                   ents
                   updates)
                  vals)
-        _ (do
-            (println "----------------------")
-            (debug data))
-        
+        _ (doseq [x data]
+            (println x))
         {:keys [db-before db-after tempids tx-data]}
         @(d/transact conn data)
         ptempids (zipmap
@@ -244,10 +257,25 @@
                      (assoc-in [:tempids key] newid)
                      (assoc-in [:valid-ids newid] newid))]))))
 
-(defn update-entity [ent attr val]
+(defn update-entity [ent & attrs-vals]
+  (let [pairs (partition 2 attrs-vals)]
+    (fn [plan]
+      (assert (get (:valid-ids plan) ent) (pr-str "Must give entity id" ent "=>" (:valid-ids plan)))
+      (let [new-plan (reduce
+                      (fn [plan [k v]]
+                        (update-in plan [:updates] (fnil conj []) [ent k v]))
+                      plan
+                      pairs)]
+        [ent new-plan]))))
+
+(defn update-all [itms]
   (fn [plan]
-    (assert (get (:valid-ids plan) ent) (pr-str "Must give entity id" ent "=>" (:valid-ids plan)))
-    [ent (update-in plan [:updates] (fnil conj []) [ent attr val])]))
+    (let [new-plan (reduce
+                    (fn [plan data]
+                      (update-in plan [:updates] (fnil conj []) data))
+                    plan
+                    itms)]
+      [nil new-plan])))
 
 (defn add-all [itms]
   (fn [plan]
@@ -303,7 +331,7 @@
 
 (defn get-plan [planval conn]
   (assert (ifn? planval))
-  (let [val (planval (new-plan conn))]
+  (let [val (planval (->TxPlan conn (db conn) {} {} {}))]
     (assert (vector? val))
     (second val)))
 
@@ -353,14 +381,17 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
   []
   (gen-plan
    [block (get-block)
-    phi-id (assert-entity {:node/type :node.type/phi} nil)]
+    phi-id (assert-entity {:node/type :node.type/phi
+                           :phi/block block
+                           :inst/type :inst.type/phi} nil)]
    phi-id))
 
 (defn add-to-phi
   "adds an incomming value to a phi node"
   [phi-node block-id value]
   (gen-plan
-   [val (assert-entity {:phi.value/node phi-node
+   [val (assert-entity {:node/type :node.type/phi-value
+                        :phi.value/node phi-node
                         :phi.value/block block-id
                         :phi.value/value value})]
    val))
@@ -370,6 +401,13 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
   [inst & args]
   (gen-plan
    [block (get-block)
+    inst (assert-entity (reduce
+                         (fn [acc [idx arg]]
+                           (assoc acc (idx->arg idx) arg))
+                         {:inst/type inst}
+                         (map vector
+                              (range)
+                              args)))
     _ (update-entity block :block/terminator-inst inst)]
    block))
 
@@ -384,7 +422,8 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
       [inst-id (assert-entity
                 (merge
                  {:inst/block block-id
-                  :inst/type instruction}
+                  :inst/type instruction
+                  :node/type :node.type/inst}
                  attrs-map)
                        key)
        _ (if prev-instruction-id
