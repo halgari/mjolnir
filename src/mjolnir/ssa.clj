@@ -202,8 +202,6 @@
                   ents
                   updates)
                  vals)
-        _ (doseq [x data]
-            (println x))
         {:keys [db-before db-after tempids tx-data]}
         @(d/transact conn data)
         ptempids (zipmap
@@ -325,6 +323,24 @@
   (fn [plan]
     [(get-in plan path) plan]))
 
+(defn push-binding [key value]
+  (fn [plan]
+    [nil (update-in plan [:bindings key] conj value)]))
+
+(defn push-alter-binding [key f & args]
+  (fn [plan]
+    [nil (update-in plan [:bindings key]
+                  #(conj % (apply f (first %) args)))]))
+
+(defn get-binding [key]
+  (fn [plan]
+    [(first (get-in plan [:bindings key])) plan]))
+
+(defn pop-binding [key]
+  (fn [plan]
+    [(first (get-in plan [:bindings key]))
+     (update-in plan [:bindgins key] pop)]))
+
 (defn no-op []
   (fn [plan]
     [nil plan]))
@@ -379,11 +395,12 @@
   "Adds a phi node to a block. In Mjolnir phi nodes are always attached to the start of a block.
 The order of the nodes cannot be set, as it shouldn't matter in the output seimantics of the code"
   []
+  (println "phi.......")
   (gen-plan
    [block (get-block)
     phi-id (assert-entity {:node/type :node.type/phi
                            :phi/block block
-                           :inst/type :inst.type/phi} nil)]
+                           :inst/type :inst.type/phi})]
    phi-id))
 
 (defn add-to-phi
@@ -408,8 +425,15 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
                          (map vector
                               (range)
                               args)))
+    _ (assoc-in-plan [:state block :terminated] true)
     _ (update-entity block :block/terminator-inst inst)]
    block))
+
+(defn terminated?
+  [block]
+  (gen-plan
+   [term (get-in-plan [:state block])]
+   term))
 
 (defn add-instruction
   ([instruction attrs-map key]

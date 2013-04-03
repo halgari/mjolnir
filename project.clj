@@ -8,7 +8,7 @@
                  [net.java.dev.jna/jna "3.4.0"]
                  [criterium "0.3.1"]
                  [midje "1.5-RC1"]
-		 [jcuda/jcuda "0.5.0"]]
+		 #_[jcuda/jcuda "0.5.0"]]
 
   :plugins [[speclj "2.5.0"]]
   :test-paths ["test/"]

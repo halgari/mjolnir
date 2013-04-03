@@ -518,11 +518,13 @@
       _ (set-block pre-then-block)
       then-val (write-ssa then)
       post-then-block (get-block)
+      then-terminated? (terminated? post-then-block)
       
       pre-else-block (add-block fnc)
       _ (set-block pre-else-block)
       else-val (write-ssa else)
       post-else-block (get-block)
+      else-terminated? (terminated? post-else-block)
 
       merge-block (add-block fnc)
       _ (set-block merge-block)
@@ -530,16 +532,24 @@
 
       _ (set-block test-block)
       br-id (terminate-block :inst.type/br test-id pre-then-block pre-else-block)
-      
-      _ (set-block post-then-block)
-      them-jmp-id (terminate-block :inst.type/jmp merge-block)
 
-      _ (set-block post-else-block)
-      else-jmp-id (terminate-block :inst.type/jmp merge-block)
+      _ (if then-terminated?
+          (no-op)
+          (gen-plan
+           [_ (set-block post-then-block)
+            _ (terminate-block :inst.type/jmp merge-block)
+            _ (add-to-phi phi-val post-then-block then-val)]
+           nil))
 
-      _ (set-block merge-block)
-      _ (add-to-phi phi-val post-then-block then-val)
-      _ (add-to-phi phi-val post-else-block else-val)]
+      _ (if else-terminated?
+          (no-op)
+          (gen-plan
+           [_ (set-block post-else-block)
+            _ (terminate-block :inst.type/jmp merge-block)
+            _ (add-to-phi phi-val post-else-block else-val)]
+           nil))      
+
+      _ (set-block merge-block)]
      phi-val)))
 
 (defrecord Call [fnc args]
@@ -657,7 +667,16 @@
   (build [this]
     (let [a (*llvm-locals* nm)]
       (assert a (str "Can't find local " nm))
-      a)))
+      a))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [locals (get-binding :locals)
+      p (get-in-plan [:bindings])]
+     (let [a (locals nm)]
+       (println "local ->>>> " a)
+       (assert a (str "Can't find local " nm " in " locals))
+       a))))
 
 
 (defrecord +Op [exprs]
@@ -776,7 +795,39 @@
             (llvm/BuildBr *builder* endblk)
             (reset! *block* endblk)
             (llvm/PositionBuilderAtEnd *builder* endblk)
-            ret))))))
+            ret)))))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [fnc (get-in-plan [:state :fn])
+      itm-ids (add-all (map (comp write-ssa second) itms))
+      recur-pnt (add-block fnc)
+      _ (terminate-block :inst.type/jmp recur-pnt)
+      prev-block (get-block)
+      _ (set-block recur-pnt)
+      phis (add-all (map (fn [x] (add-phi))
+                         (range (count itms))))
+      _ (add-all (map (fn [phi-node val]
+                           (add-to-phi phi-node prev-block val))
+                         phis
+                         itm-ids))
+      _ (apply push-alter-binding :locals assoc (mapcat (fn [[nm _] val]
+                                                          (println "->>>> " nm "  " val)
+                                                          [nm val])
+                                                        itms
+                                                        phis))
+      _ (push-binding :recur recur-pnt)
+      _ (push-binding :recur-phis phis)
+      return-val (write-ssa body)
+      _ (pop-binding :recur-phis)
+      _ (pop-binding :recur)
+      _ (pop-binding :locals)
+      end-block (add-block fnc)
+      _ (terminate-block :inst.type/jmp end-block)
+      _ (set-block end-block)]
+     (do
+       (println "phis----" phis)
+       return-val))))
 
 (defrecord Let [nm bind body]
   Validatable
@@ -796,7 +847,15 @@
                          nm (return-type bind))
               *llvm-locals* (assoc *llvm-locals*
                               nm (build bind))]
-      (build body))))
+      (build body)))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [bind-id (write-ssa bind)
+      _ (push-alter-binding :locals assoc nm bind-id)
+      val (write-ssa body)
+      _ (pop-binding :locals)]
+     val)))
 
 (defrecord Malloc [type cnt]
   Validatable
@@ -1001,7 +1060,7 @@
           (llvm/BuildStore *builder* (build (nth vals idx)) gep)))
       malloc)))
 
-(defrecord Recur [items type]
+(defrecord Recur-old [items]
   Validatable
   (validate [this]
     (assure (= (count items) (count *recur-point*)))
@@ -1022,6 +1081,22 @@
                           (into-array Pointer [@*block*])
                           1))
       :terminated)))
+
+(defrecord Recur [items]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [item-ids (add-all (map write-ssa items))
+      this-block (get-block)
+      phis (get-binding :recur-phis)
+      _ (add-all (map (fn [phi val]
+                        (println "<---" phi " ")
+                        (add-to-phi phi this-block val))
+                      phis
+                      item-ids))
+      recur-pnt (get-binding :recur)
+      _ (terminate-block :inst.type/jmp recur-pnt)]
+     nil)))
 
 (defrecord Free [val]
   Validatable
