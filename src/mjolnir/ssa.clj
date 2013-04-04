@@ -79,6 +79,7 @@
    :error/calue #{:one :string}
 
    :inst.binop/type #{:one :keyword}
+   :inst.binop/sub-type #{:one :keyword}
    :inst.arg/idx #{:one :int}
 
    :inst.gbl/name #{:one :string}

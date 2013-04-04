@@ -328,10 +328,8 @@
     (llvm/SizeOf (llvm-type tp))))
 
 (def binop-maps
-  {:+ :inst.binop.type/+
-   :< :inst.binop.type/<
-   :<= :inst.binop.type/<=
-   :- :inst.binop.type/-})
+  {:+ :inst.binop.type/add
+   :- :inst.binop.type/sub})
 
 
 
