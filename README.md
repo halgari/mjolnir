@@ -4,6 +4,8 @@ Mjolnir is a Clojure library designed to simplify native code generation. It is 
 
 Internally, Mjolnir wraps the LLVM library. It then provides several layers of abstractions on top of LLVM. See the examples in the repository for indepth examples of the library at work. 
 
+NOTE: the real work lately has been going on in the datomic branch. See recent additions to that branch for up-to-date examples. 
+
 ## Layers
 
 Constructors - various Clojure functions that wrap expressions and can emulate let, defn, etc. To use these, use the following pattern
