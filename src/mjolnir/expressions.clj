@@ -419,10 +419,11 @@
                             (range)
                             arg-names))
       head-node (assert-seq args)
-      fn-id (assert-entity {:node/type :node.type/fn
-                            :fn/type type-id
-                            :fn/name name
-                            :fn/argument-names head-node}
+      fn-id (assert-entity (merge {:node/type :node.type/fn
+                                   :fn/type type-id
+                                   :fn/name name}
+                                  (when head-node
+                                    {:fn/argument-names head-node}))
                            this)
       _ (assoc-in-plan [:state :fn] fn-id)
       block-id (add-entry-block fn-id)
@@ -855,7 +856,7 @@
       _ (pop-binding :locals)]
      val)))
 
-(defrecord Malloc [type cnt]
+(defrecord Malloc-old [type cnt]
   Validatable
   (validate [this]
     (assure (type? type))
@@ -865,6 +866,27 @@
     (->ArrayType type cnt))
   (build [this]
     (llvm/BuildMalloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
+
+(defrecord Malloc [type]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp-id (add-to-plan type)
+      inst-id (add-instruction :inst.type/malloc
+                               {:inst.malloc/type tp-id
+                                :node/return-type tp-id})]
+     inst-id)))
+
+(defrecord Free [itm]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [itm (write-ssa itm)
+      void (add-to-plan VoidT)
+      inst-id (add-instruction :inst.type/free
+                               {:inst.arg/arg0 itm
+                                :node/return-type void})]
+     inst-id)))
 
 #_(defrecord Alloc [type cnt]
   Validatable
@@ -907,7 +929,18 @@
                             (count idx)
                             (genname "gep_"))]
       (llvm/BuildStore *builder* (build val) gep)
-      a)))
+      a))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [arr-id (write-ssa arr)
+      idx-id (write-ssa idx)
+      val-id (write-ssa val)
+      inst-id (add-instruction :inst.type/aset
+                               {:inst.arg/arg0 arr-id
+                                :inst.arg/arg1 idx-id
+                                :inst.arg/arg2 val-id})]
+     inst-id)))
 
 (defrecord AGet [arr idx]
   Validatable
@@ -936,7 +969,16 @@
                             (genname "gep_"))]
       (llvm/BuildLoad *builder*
                       gep
-                      (genname "load_")))))
+                      (genname "load_"))))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [arr-id (write-ssa arr)
+      idx-id (write-ssa idx)
+      inst-id (add-instruction :inst.type/aget
+                               {:inst.arg/arg0 arr-id
+                                :inst.arg/arg1 idx-id})]
+     inst-id)))
 
 (defrecord Set [ptr member val]
   Validatable
@@ -1096,7 +1138,7 @@
       _ (terminate-block :inst.type/jmp recur-pnt)]
      nil)))
 
-(defrecord Free [val]
+(defrecord Free-old [val]
   Validatable
   (validate [this]
     (ElementPointer? (return-type val)))
@@ -1119,7 +1161,12 @@
   (build [this]
     (doseq [exp (butlast body)]
       (build exp))
-    (build (last body))))
+    (build (last body)))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [body-ids (add-all (map write-ssa body))]
+     (last body-ids))))
 
 (defrecord Global [name val type]
   Validatable

@@ -65,6 +65,10 @@
   [tp val]
   (llvm/ConstInt (build-type tp) val))
 
+(defmethod build-type :type/void
+  [x]
+  (llvm/VoidType))
+
 
 
 (defmethod build-type :type/float

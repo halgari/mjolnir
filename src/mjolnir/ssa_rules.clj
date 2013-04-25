@@ -1,9 +1,10 @@
-(ns mjolnir.ssa-rules)
+(ns mjolnir.ssa-rules
+  (:require [clojure.pprint  :refer [pprint]]))
 
 (def rules (atom []))
 
 (defmacro defrule [name args doc & body]
-  (println "Registered rule" name)
+  (println "Registered rule" name )
   (swap! rules conj `[(~name ~@args)
                       ~@body])
   nil)
@@ -84,6 +85,26 @@
   [?id :inst.arg/idx ?idx]
   [?arg-node :fn.arg/idx ?idx]
   [?arg-node :fn.arg/type ?type])
+
+(defn debug-datalog [x]
+  (println "datalong -----------------   " x)
+  x)
+
+(defrule return-type [?id ?type]
+  "ASet returns the arr type"
+  [?id :inst/type :inst.type/aset]
+  [?id :inst.arg/arg0 ?arg0]
+  [?arg0 :inst/type ?v]
+  [(mjolnir.ssa-rules/debug-datalog ?v)]
+  (return-type ?arg0 ?type)
+)
+
+(defrule return-type [?id ?type]
+  "AGet returns the element type"
+  [?id :inst/type :inst.type/aget]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?arg0-t)
+  [?arg0-t :type/element-type ?type])
 
 
 (defrule validate [?id ?msg]

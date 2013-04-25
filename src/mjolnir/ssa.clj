@@ -74,6 +74,7 @@
    :type/width #{:one :int}
 
    :type/element-type #{:one :ref}
+   :type/length #{:one :int}
 
    :error/key #{:one :keyword}
    :error/calue #{:one :string}
@@ -86,6 +87,8 @@
    :inst.call/fn #{:one :ref}
 
    :inst.cmp/pred #{:one :keyword}
+
+   :inst.malloc/type #{:one :ref}
 
    ;; args
    :inst.arg/arg0 #{:one :ref}
@@ -231,18 +234,21 @@
     (cons (:list/head head)
           (lazy-seq (to-seq (:list/tail head))))))
 
-(defn singleton [sing key]
-  (fn [plan]
-    (if-let [id (get-in plan [:singletons sing])]
-      [id plan]
-      (if-let [q (find-singleton (:db plan) sing)]
-        [q (assoc-in plan [:singletons sing] q)]
-      (let [newid (d/tempid :db.part/user)]
-        [newid (-> plan
-                   (assoc-in [:singletons sing] newid)
-                   (assoc-in [:new-ents sing] newid)
-                   (assoc-in [:tempids key] newid)
-                   (assoc-in [:valid-ids newid] newid))])))))
+(defn singleton
+  ([sing]
+     (singleton sing nil))
+  ([sing key]
+      (fn [plan]
+        (if-let [id (get-in plan [:singletons sing])]
+          [id plan]
+          (if-let [q (find-singleton (:db plan) sing)]
+            [q (assoc-in plan [:singletons sing] q)]
+            (let [newid (d/tempid :db.part/user)]
+              [newid (-> plan
+                         (assoc-in [:singletons sing] newid)
+                         (assoc-in [:new-ents sing] newid)
+                         (assoc-in [:tempids key] newid)
+                         (assoc-in [:valid-ids newid] newid))]))))))
 
 (defn assert-entity
   ([ent]
@@ -437,6 +443,8 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
    term))
 
 (defn add-instruction
+  ([instruction attrs-map]
+     (add-instruction instruction attrs-map nil))
   ([instruction attrs-map key]
      (fn [plan]
        (let [block-id (:block-id plan)

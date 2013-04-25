@@ -80,7 +80,13 @@
             true)
   Type
   (llvm-type [this]
-             (llvm/VoidType)))
+    (llvm/VoidType))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [this-id (singleton
+               {:node/type :type/void})]
+     this-id)))
 
 (defn integer-type? [tp]
   (instance? IntegerType tp))
@@ -180,7 +186,16 @@
     (llvm/ArrayType (llvm-type etype) cnt))
   ElementPointer
   (etype [this]
-    (:etype this)))
+    (:etype this))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [tp (add-to-plan etype)
+      this-id (singleton {:node/type :type.array
+                          :type/element-type tp
+                          :type/length cnt}
+                         this)]
+     this-id)))
 
 (defrecord FunctionType [arg-types ret-type]
   Validatable
@@ -199,17 +214,15 @@
      [args (add-all (map add-to-plan arg-types))
       ret (add-to-plan ret-type)
       seq (assert-seq args)
-      this-id (singleton {:node/type :type/fn
-                          :type.fn/return ret
-                          :type.fn/arguments seq}
-                         this)
+      this-id (singleton (merge {:node/type :type/fn
+                                 :type.fn/return ret}
+                                (when seq
+                                  {:type.fn/arguments seq})))
       _ (assert-all (map (fn [x idx]
-                           (let [t [{:fn.arg/type x
-                                     :fn.arg/idx idx
-                                     :fn.arg/fn this-id}
-                                    nil]]
-                             (println t)
-                             t))
+                           [{:fn.arg/type x
+                             :fn.arg/idx idx
+                             :fn.arg/fn this-id}
+                            nil])
                       args
                       (range)))]
      this-id)))

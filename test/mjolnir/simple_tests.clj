@@ -8,8 +8,9 @@
    [mjolnir.ssa :refer :all]
    [mjolnir.llvm-builder :refer :all]
    [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
-                          ->FunctionType]]
-   [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur]]))
+                          ->FunctionType VoidT ->ArrayType]]
+   [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
+                                ->ASet ->AGet ->Do]]))
 
 
 (deftest compile-add-one-function
@@ -49,7 +50,6 @@
       (dotimes [x 3] (infer-all conn))
       (validate (db conn))
       (dump (let [x (build (db conn))]
-              (Thread/sleep 1000)
               x)))))
 
 
@@ -70,7 +70,6 @@
       (dotimes [x 3] (infer-all conn))
       (validate (db conn))
       (dump (let [x (build (db conn))]
-              (Thread/sleep 1000)
               x)))))
 
 (deftest compile-count-to-ten-function
@@ -91,7 +90,29 @@
       (infer-all conn)
       (validate (db conn))
       (dump (let [x (build (db conn))]
-              (Thread/sleep 1000)
+
+              x)))))
+
+(deftest compile-count-to-ten-function
+  (binding [*int-type* Int64
+            *target* (default-target)]
+    (let [conn (new-db)
+          ft (->FunctionType [] VoidT)
+          atype (->ArrayType Int64 10)
+          fnc (->Fn "fib" ft []
+                    (->Let "arr" (->Malloc atype)
+                           (->Do
+                            [(->ASet (->Local "arr") 0 42)
+                             (->AGet (->Local "arr") 0)
+                             (->Free (->Local "arr"))])))]
+      (-> (gen-plan
+           [f-id (add-to-plan fnc)]
+           f-id)
+          (get-plan conn)
+          commit)
+      (infer-all conn)
+      (validate (db conn))
+      (dump (let [x (build (db conn))]
               x)))))
 
 
