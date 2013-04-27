@@ -3,7 +3,8 @@
             [datomic.api :refer [db q] :as d]
             [mjolnir.llvmc :as llvm]
             [mjolnir.targets.target :as target]
-            [mjolnir.config :refer :all]))
+            [mjolnir.config :refer :all])
+  (:import [com.sun.jna Native Pointer]))
 
 (defn- unpack-arg [defs instr idx nm]
   `[~nm (~defs (~(idx->arg idx) ~instr))])
@@ -37,7 +38,7 @@
   )
 
 ;; Converts a type entity to a llvm type
-(defmulti build-type (fn [x] (:node/type x)))
+(defmulti build-type :node/type)
 
 (defmulti build-instruction (fn [d module builder fn itm defs]
                               (println ":inst/type "
@@ -51,7 +52,7 @@
 
 (defmethod build-type :default
   [x]
-  (assert false (str "Don't know how to create llvm-type from " (:node/type x))))
+  (assert false (str "Don't know how to build-type from " (pr-str x))))
 
 
 ;; Using the type entity (tp) encodes vall as that type
@@ -76,6 +77,17 @@
   (case (:type/width x)
     32 (llvm/FloatType)
     64 (llvm/DoubleType)))
+
+(defmethod build-type :type/array
+  [x]
+  (let [etype (build-type (:type/element-type x))]
+    (llvm/ArrayType etype (:type/length x))))
+
+(defmethod build-type :type/pointer
+  [x]
+  (let [etype (build-type (:type/element-type x))]
+    (llvm/PointerType etype
+                      0)))
 
 
 
@@ -229,7 +241,7 @@
 
 (defmethod build-instruction :default
   [d module builder fn itm defs]
-  (assert false (pr-str "Can't build instruction " itm)))
+  (assert false (pr-str "Can't build instruction " (d/touch itm))))
 
 (defmethod build-instruction :inst.type/const
   [d module builder fn itm defs]
@@ -316,6 +328,47 @@
     (->>
      (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (str (:db/id inst)))
      (assoc defs inst))))
+
+
+(defmethod build-instruction :inst.type/malloc
+  [d module builder fn inst defs]
+  (let [tp (:inst.malloc/type inst)
+        llvm-type (build-type tp)]
+    (->> (llvm/BuildMalloc builder llvm-type (str "malloc_" (:db/id inst)))
+         (assoc defs inst))))
+
+(defn- pointer-type-to [x]
+  {:node/type :type/pointer
+   :type/element-type x})
+
+
+(defmethod build-instruction :inst.type/aset
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr idx val]
+               (println
+                "...... "
+                (-> inst
+                                  :inst.arg/arg0
+                                  :node/return-type
+                                  :type/element-type
+                                  pointer-type-to
+                                  
+                                  ))
+               (let [ret-type (-> inst
+                                  :inst.arg/arg0
+                                  :node/return-type
+                                  :type/element-type
+                                  pointer-type-to
+                                  build-type)
+                 casted (llvm/BuildBitCast builder ptr ret-type (str "casted_" (:db/id inst)))
+                 gep (llvm/BuildGEP builder
+                                    casted
+                                    (into-array Pointer [idx])
+                                    1
+                                    (str "gep_" (:db/id inst)))]
+               (llvm/BuildStore builder val gep)
+               (assoc defs inst ptr))))
 
 
 

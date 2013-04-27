@@ -191,7 +191,7 @@
   (add-to-plan [this]
     (gen-plan
      [tp (add-to-plan etype)
-      this-id (singleton {:node/type :type.array
+      this-id (singleton {:node/type :type/array
                           :type/element-type tp
                           :type/length cnt}
                          this)]
