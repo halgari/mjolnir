@@ -41,9 +41,6 @@
 (defmulti build-type :node/type)
 
 (defmulti build-instruction (fn [d module builder fn itm defs]
-                              (println ":inst/type "
-                                       (:inst/type itm)
-                                       (:db/id itm))
                               (:inst/type itm)))
 
 (defmulti build-terminator (fn [module builder fn inst defs]
@@ -143,10 +140,9 @@
   [blk1 blk2]
   (let [st (set (map (fn [x]
                        (or (:inst/block x)
-                           (debug (:phi/block x))
+                           (:phi/block x)
                            (assert nil (str x))))
-                     (debug (mapcat args-seq (instruction-seq blk1)))))]
-    (println (:db/id blk1) " depends-> " (contains? st blk2) "  "(:db/id blk2) st)
+                     (mapcat args-seq (instruction-seq blk1))))]
     (contains? st blk2)))
 
 (defn block-comparator [blk1 blk2]
@@ -167,7 +163,6 @@
   (reduce
    (fn [defs phi]
      (assert (:node/return-type phi))
-     (println "phi " (:db/id phi) phi)
      (assoc defs
        phi
        (llvm/BuildPhi builder
@@ -200,7 +195,6 @@
         llvm-block (llvm/AppendBasicBlock fnc (str "blk_" (:db/id block)))
         _ (llvm/PositionBuilderAtEnd builder llvm-block)
         defs (assoc defs block llvm-block)
-        _ (println "_----")
         defs (build-phi-nodes block builder defs)
         defs (reduce
               (fn [defs inst]
@@ -223,20 +217,20 @@
 
 (defmethod build-item :node.type/fn
   [db-val module this]
-  (let [blocks (get-ordered-block-list this)
-        _ (debug (map :db/id blocks))
-        fnc (llvm/GetNamedFunction module (:fn/name this))
-        defs (reduce
-              (fn [defs block]
-                (build-block db-val module fnc block defs))
-              {}
-              blocks)
-        defs (reduce
-              (fn [defs block]
-                (build-termination db-val module fnc block defs))
-              defs
-              blocks)]
-    (link-phi-nodes this defs)))
+  (when-not (:fn/extern? this)
+    (let [blocks (get-ordered-block-list this)
+          fnc (llvm/GetNamedFunction module (:fn/name this))
+          defs (reduce
+                (fn [defs block]
+                  (build-block db-val module fnc block defs))
+                {}
+                blocks)
+          defs (reduce
+                (fn [defs block]
+                  (build-termination db-val module fnc block defs))
+                defs
+                blocks)]
+      (link-phi-nodes this defs))))
 
 
 (defmethod build-instruction :default
@@ -337,6 +331,12 @@
     (->> (llvm/BuildMalloc builder llvm-type (str "malloc_" (:db/id inst)))
          (assoc defs inst))))
 
+(defmethod build-instruction :inst.type/free
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr]
+               (llvm/BuildFree builder ptr)))
+
 (defn- pointer-type-to [x]
   {:node/type :type/pointer
    :type/element-type x})
@@ -346,15 +346,6 @@
   [d module builder fn inst defs]
   (unpack-args defs inst
                [ptr idx val]
-               (println
-                "...... "
-                (-> inst
-                                  :inst.arg/arg0
-                                  :node/return-type
-                                  :type/element-type
-                                  pointer-type-to
-                                  
-                                  ))
                (let [ret-type (-> inst
                                   :inst.arg/arg0
                                   :node/return-type
@@ -370,6 +361,26 @@
                (llvm/BuildStore builder val gep)
                (assoc defs inst ptr))))
 
+(defmethod build-instruction :inst.type/aget
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr idx]
+               (let [ptr-type (-> inst
+                                  :inst.arg/arg0
+                                  :node/return-type
+                                  :type/element-type
+                                  pointer-type-to
+                                  build-type)
+                     casted (llvm/BuildBitCast builder ptr ptr-type (str "casted_" (:db/id inst)))
+                     gep (llvm/BuildGEP builder
+                                        casted
+                                        (into-array Pointer [idx])
+                                        1
+                                        (str "gep_" (:db/id inst)))]
+                 (->>
+                  (llvm/BuildLoad builder gep (str "load_" (:db/id inst)))
+                  (assoc defs inst)))))
+
 
 
 (defn build [db]
@@ -380,7 +391,6 @@
                         db
                         ssa-rules)
                      (map (comp (partial d/entity db) first)))
-        _ (println "Globals: " (count globals))
         module (new-module)
         builder (llvm/CreateBuilder)]
     (doseq [global globals]

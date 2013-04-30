@@ -10,7 +10,7 @@
    [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
                           ->FunctionType VoidT ->ArrayType]]
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
-                                ->ASet ->AGet ->Do]]))
+                                ->ASet ->AGet ->Do ->Module]]))
 
 
 (deftest compile-add-one-function
@@ -93,7 +93,7 @@
 
               x)))))
 
-(deftest compile-count-to-ten-function
+(deftest compile-aget-aset-function
   (binding [*int-type* Int64
             *target* (default-target)]
     (let [conn (new-db)
@@ -107,6 +107,25 @@
                              (->Free (->Local "arr"))])))]
       (-> (gen-plan
            [f-id (add-to-plan fnc)]
+           f-id)
+          (get-plan conn)
+          commit)
+      (infer-all conn)
+      (validate (db conn))
+      (dump (let [x (build (db conn))]
+              x)))))
+
+(deftest compile-module
+  (binding [*int-type* Int64
+            *target* (default-target)]
+    (let [conn (new-db)
+          ft (->FunctionType [] VoidT)
+          atype (->ArrayType Int64 10)
+          fnc (->Fn "fnc1" ft [] 1)
+          fnc2 (->Fn "fnc2" ft [] 2)
+          mod (->Module [fnc fnc2])]
+      (-> (gen-plan
+           [f-id (add-to-plan mod)]
            f-id)
           (get-plan conn)
           commit)

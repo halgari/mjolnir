@@ -79,7 +79,16 @@
     tp)
   (build [this]
     (assert (not (keyword ptr)) ptr)
-    (llvm/BuildBitCast *builder* (build ptr) (llvm-type tp) (genname "bitcast_"))))
+    (llvm/BuildBitCast *builder* (build ptr) (llvm-type tp) (genname "bitcast_")))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp-id (add-to-plan tp)
+      ptr (write-ssa ptr)
+      casted (add-instruction :inst.type/cast
+                              {:inst.cast/type tp-id
+                               :node/return-type tp-id})]
+     casted)))
 
 (defrecord Trunc [a tp]
   Validatable
@@ -279,8 +288,7 @@
       (assure (string? arg-name))
       (assure (type? arg-type))
       (assure (integer? arg-idx)))
-    Expression
-    (return-type [this]
+    Expression    (return-type [this]
       arg-type)
     (build [this]
       (llvm/GetParam *llvm-fn* arg-idx)))
@@ -410,8 +418,7 @@
   IToPlan
   (add-to-plan [this]
     (gen-plan
-     [old-fn (get-in-plan [:state :fn])
-      type-id (add-to-plan type) 
+     [type-id (add-to-plan type) 
       args (assert-all (map (fn [idx name]
                               (let [a {:argument/name name
                                        :argument/idx idx}]
@@ -426,39 +433,21 @@
                                     {:fn/argument-names head-node}))
                            this)
       _ (assoc-in-plan [:state :fn] fn-id)
-      block-id (add-entry-block fn-id)
-      body-id (write-ssa body)
-      ret-id (terminate-block :inst.type/return-val body-id)
-      _ (assoc-in-plan [:state :fn] old-fn)]
+      _ (if body
+          (gen-plan
+           [block-id (add-entry-block fn-id)
+            body-id (write-ssa body)
+            ret-id (terminate-block :inst.type/return-val body-id)]
+           ret-id)
+          (mark-extern-fn fn-id))]
      [fn-id])))
 
-(defrecord Module [name body]
-  Validatable  
-  (validate [this]
-    (doseq [e body]
-      (assure (GlobalExpression? e))
-      (valid? e))
-    (assure (string? name)))
-  
-  Expression
-  (return-type [this]
-    (assert false "Can't get the return type of a module"))
-  (build [this]
-    (let [_ (valid? this)
-          error (llvm/new-pointer)
-          module (llvm/ModuleCreateWithName name)]
-      (binding [*module* module
-                *builder* (llvm/CreateBuilder)]
-        (doseq [exp body]
-          (stub-global exp))
-        (doseq [exp body]
-          (build exp))
-        #_(Thread/sleep 1000)
-        (llvm/VerifyModule module llvm/PrintMessageAction error)
-        #_(llvm/DumpModule module)
-        #_(Thread/sleep 1000)
-        (llvm/DisposeMessage (llvm/value-at error))
-        module))))
+(defrecord Module [body]
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [ids (add-all (map add-to-plan body))]
+     ids)))
 
 (defrecord If [test then else]
   Validatable
@@ -673,7 +662,6 @@
      [locals (get-binding :locals)
       p (get-in-plan [:bindings])]
      (let [a (locals nm)]
-       (println "local ->>>> " a)
        (assert a (str "Can't find local " nm " in " locals))
        a))))
 

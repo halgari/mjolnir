@@ -95,7 +95,6 @@
   [?id :inst/type :inst.type/aset]
   [?id :inst.arg/arg0 ?arg0]
   [?arg0 :inst/type ?v]
-  [(mjolnir.ssa-rules/debug-datalog ?v)]
   (return-type ?arg0 ?type)
 )
 

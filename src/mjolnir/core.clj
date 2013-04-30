@@ -1,6 +1,24 @@
-(ns mjolnir.core)
+(ns mjolnir.core
+  (:require
+   [mjolnir.inference :refer [infer-all]]
+   [mjolnir.validation :refer [validate]]
+   [clojure.test :refer :all]
+   [datomic.api :refer [q db] :as d]
+   [mjolnir.config :refer [*int-type* *target* default-target]]
+   [mjolnir.ssa :refer :all]
+   [mjolnir.llvm-builder :refer [build]]))
 
-(defn foo
-  "I don't do a whole lot."
-  [x]
-  (println x "Hello, World!"))
+(defn to-db [m]
+  (let [conn (new-db)]
+    (-> (gen-plan
+         [_ (add-to-plan m)]
+         nil)
+        (get-plan conn)
+        commit)
+    conn))
+
+(defn to-llvm-module [conn]
+  (infer-all conn)
+  (validate (db conn))
+  (build (db conn)))
+

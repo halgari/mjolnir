@@ -27,6 +27,7 @@
    :ref [:db/valueType :db.type/ref]
    :keyword [:db/valueType :db.type/keyword]
    :int [:db/valueType :db.type/long]
+   :boolean [:db/valueType :db.type/boolean]
    :string [:db/valueType :db.type/string]
    :unique [:db/unique :db.unique/value]})
 
@@ -38,6 +39,7 @@
    :fn/name #{:one :string}
    :fn/body #{:one :ref}
    :fn/entry-block #{:one :ref}
+   :fn/extern? #{:one :boolean}
 
    :fn.arg/type #{:one :ref}
    :fn.arg/idx #{:one :int}
@@ -82,6 +84,8 @@
    :inst.binop/type #{:one :keyword}
    :inst.binop/sub-type #{:one :keyword}
    :inst.arg/idx #{:one :int}
+
+   :inst.cast/type #{:one :ref}
 
    :inst.gbl/name #{:one :string}
    :inst.call/fn #{:one :ref}
@@ -309,14 +313,14 @@
 (defmacro gen-plan [binds id-expr]
   (let [binds (partition 2 binds)
         psym (gensym "plan_")
-        f (reduce
-           (fn [acc [id expr]]
-             `(~(with-bind id expr psym acc)
-               ~psym))
-           `[~id-expr ~psym]
-           (reverse binds))]
+        forms (reduce
+               (fn [acc [id expr]]
+                 (concat acc `[[~id ~psym] (~expr ~psym)]))
+               []
+               binds)]
     `(fn [~psym]
-       ~f)))
+       (let [~@forms]
+         [~id-expr ~psym]))))
 
 (defn assoc-plan [key val]
   (fn [plan]
@@ -382,6 +386,11 @@
     (gen-plan
      [blk (assert-entity blk blk)]
      blk)))
+
+(defn mark-extern-fn [fn-id]
+  (gen-plan
+   [_ (update-entity fn-id :fn/extern? true)]
+   nil))
 
 (defn set-block [block-id]
   (fn [plan]

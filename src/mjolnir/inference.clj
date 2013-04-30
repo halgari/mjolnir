@@ -24,7 +24,6 @@
                      [(:inst/type (d/touch (d/entity (db conn) ?nd))) :->
                       ?attr :->
                       ?type])
-                   nodes)]
-      (println s))
+                   nodes)])
     (println "infered" (count nodes) "nodes")
     (d/transact conn data)))
