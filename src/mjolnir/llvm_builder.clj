@@ -15,18 +15,35 @@
                      (range)
                      args)]
     `(let [~@frms]
-       ~@(map (fn [a idx]
-                `(assert ~a (str "can't find " (~(idx->arg idx) ~instr)
-                                 " "
-                                 (:inst/type (~(idx->arg idx) ~instr))
-                                 " "
-                                 (:db/id (:inst/block ~instr))
-                                 " "
-                                 (:db/id (:phi/block (~(idx->arg idx) ~instr))))))
-              args
-              (range))
+       ~@(mapcat (fn [idx a]
+                   [`(let [blk# (or (:phi/block (~(idx->arg idx) ~instr))
+                                    (:inst/block (~(idx->arg idx) ~instr)))
+                           blk-inst# (~defs blk#)]
+                       #_(assert blk-inst# (str "Block not built: " blk# " in " (:inst/block ~instr))))
+                    `(assert  ~a
+                              (str "can't find {" (~(idx->arg idx) ~instr)
+                                   " "
+                                   (:inst/type (~(idx->arg idx) ~instr))
+                                   " "
+                                   "} for { "
+                                   (:inst/type ~instr)
+                                   " "
+                                   (:db/id (:inst/block ~instr))
+                                   "} "
+                                   (:db/id (:phi/block (~(idx->arg idx) ~instr)))))
+                    `(assert (not (map? ~a))
+                             (str "bad arg format " (~(idx->arg idx) ~instr)
+                                  " "
+                                  (:inst/type (~(idx->arg idx) ~instr))
+                                  " "
+                                  (:db/id (:inst/block ~instr))
+                                  "->  "
+                                  ~(pr-str a)
+                                  ~a))])
+                 (range)
+                 args)
        (assoc
-         ~defs
+           ~defs
          ~instr
          (do ~@body)))))
 
@@ -138,24 +155,59 @@
 (defn depends-on?
   "Returns true if blk1 requires the results of instructions in blk2"
   [blk1 blk2]
-  (let [st (set (map (fn [x]
-                       (or (:inst/block x)
-                           (:phi/block x)
-                           (assert nil (str x))))
-                     (mapcat args-seq (instruction-seq blk1))))]
+  (let [st (-> (set (map (fn [x]
+                           (or (:inst/block x)
+                               (:phi/block x)))
+                         (concat (mapcat args-seq (instruction-seq blk1))
+                                 (args-seq (:block/terminator-inst blk1)))))
+               (disj nil))]
     (contains? st blk2)))
 
+(defn find-a-node [deps already-have-nodes]
+  (some (fn [[k v]] (if (empty? (remove already-have-nodes v)) k)) deps))
+
+(defn order-nodes [deps]
+  (loop [deps deps already-have-nodes #{} output []]
+    (if (empty? deps)
+      output
+      (if-let [item (find-a-node deps already-have-nodes)]
+        (recur
+          (dissoc deps item)
+          (conj already-have-nodes item)
+          (conj output item))
+        (throw (Exception. "Circular dependency."))))))
+
+(defn node-deps [blocks block]
+  (->> blocks
+       (remove #{block})
+       (filter (partial depends-on? block))))
+
 (defn block-comparator [blk1 blk2]
-  (cond
-   (depends-on? blk1 blk2) 1
-   (depends-on? blk2 blk1) -1
-   :else 0))
+  (let [result (cond
+                (depends-on? blk1 blk2) 1
+                (depends-on? blk2 blk1) -1
+                :else 0)]
+    result))
+
+(defn get-unbuilt-deps [block blocks defs]
+  (when-let [dep-blk (->>
+                      blocks
+                      (remove defs)
+                      (filter (partial depends-on? block blocks))
+                      first)]
+    (get-unbuilt-deps dep-blk)
+    block))
 
 (defn get-ordered-block-list
   "Gets a list of blocks for a function sorted by suggested build order"
   [fnc]
-  (let [entry (:fn/entry-block fnc)]
-    (->> (sort block-comparator (:block/_fn fnc))
+  (let [entry (:fn/entry-block fnc)
+        blocks (:block/_fn fnc)
+        deps (zipmap blocks
+                     (map (partial node-deps blocks) blocks))]
+    (->> #_(sort block-comparator (:block/_fn fnc))
+         #_(block-order (first blocks) #{} (set blocks))
+         (order-nodes deps)
          (remove #{entry})
          (cons entry))))
 
@@ -176,8 +228,7 @@
                node (:phi/_block block)
                incoming (:phi.value/_node node)]
            (let [inst (:phi.value/value incoming)
-                 inst-block (or (:inst/block inst)
-                                (:phi/block inst))
+                 inst-block (:phi.value/block incoming)
                  llvm-block (defs inst-block)
                  llvm-inst (defs inst)
                  llvm-phi (defs node)]
@@ -192,7 +243,7 @@
 
 (defn build-block [db-val module fnc block defs]
   (let [builder (llvm/CreateBuilder)
-        llvm-block (llvm/AppendBasicBlock fnc (str "blk_" (:db/id block)))
+        llvm-block (llvm/AppendBasicBlock fnc (str (:block/name block) "_" (:db/id block)))
         _ (llvm/PositionBuilderAtEnd builder llvm-block)
         defs (assoc defs block llvm-block)
         defs (build-phi-nodes block builder defs)
@@ -358,8 +409,8 @@
                                     (into-array Pointer [idx])
                                     1
                                     (str "gep_" (:db/id inst)))]
-               (llvm/BuildStore builder val gep)
-               (assoc defs inst ptr))))
+                 (llvm/BuildStore builder val gep)
+                 gep)))
 
 (defmethod build-instruction :inst.type/aget
   [d module builder fn inst defs]
@@ -377,9 +428,16 @@
                                         (into-array Pointer [idx])
                                         1
                                         (str "gep_" (:db/id inst)))]
-                 (->>
-                  (llvm/BuildLoad builder gep (str "load_" (:db/id inst)))
-                  (assoc defs inst)))))
+                 (llvm/BuildLoad builder gep (str "load_" (:db/id inst))))))
+
+(defmethod build-instruction :inst.type/cast
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr]
+               (let [to-type (-> inst
+                                 :node/return-type
+                                 build-type)]
+                 (llvm/BuildBitCast builder ptr to-type (str "cast_" (:db/id inst))))))
 
 
 
@@ -401,8 +459,11 @@
 
 
 (defn verify [module]
-  (llvm/VerifyModule module)
-  module)
+  (let [ptr (llvm/new-pointer)]
+    (when-not (= (llvm/VerifyModule module llvm/LLVMPrintMessageAction ptr) false)
+      (assert false #_(.getString ptr 0)))
+    (llvm/DisposeMessage (llvm/value-at ptr))
+    module))
 
 
 (defn optimize [module]

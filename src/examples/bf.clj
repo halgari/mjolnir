@@ -132,6 +132,7 @@
                                cfn)
               conn (core/to-db module)
               built (core/to-llvm-module conn)
+              
               optimized built
               _ (println "Writing Object File")
               compiled (time (emit-to-file config/*target*

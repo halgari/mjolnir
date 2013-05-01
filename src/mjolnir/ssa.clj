@@ -57,6 +57,7 @@
    :inst/return-value #{:one :ref}
    
    :block/fn #{:one :ref}
+   :block/name #{:one :string}
    :block/terminator-inst #{:one :ref}
    
    :const/int-value #{:one :int}
@@ -188,40 +189,44 @@
   "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
   [{:keys [conn db new-ents updates valid-ids] :as plan}]
   (assert (and conn db))
-  (let [ents (reduce
-              (fn [acc [ent id]]
-                (assert (not (get acc id)) "Duplicate ids")
-                (assoc acc id (assoc ent :db/id id)))
-              {}
-              new-ents)
-        _ (assert (= (set (keys ents))
-                     (set (keys valid-ids)))
-                  (pr-str (count (set (keys ents)))
-                          (count (set (keys valid-ids)))
-                          (count new-ents)))
-        data (-> (reduce
-                  (fn [acc [k attr val]]
-                    (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
-                                                        k
-                                                        (get valid-ids k)
-                                                        " in "
-                                                        (keys valid-ids)))
-                    (assoc-in acc [k attr] val))
-                  ents
-                  updates)
-                 vals)
-        {:keys [db-before db-after tempids tx-data]}
-        @(d/transact conn data)
-        ptempids (zipmap
-                  (keys (:tempids plan))
-                  (map (partial d/resolve-tempid db-after tempids)
-                       (vals (:tempids plan))))]
-    (assoc plan
-      :tempids ptempids
-      :db db-after
-      :db-before db-before
-      :new-ents nil
-      :singletons nil)))
+  (println "Writing to DB...")
+  (time
+   (let [ents (reduce
+               (fn [acc [ent id]]
+                 (assert (not (get acc id)) "Duplicate ids")
+                 (assoc acc id (assoc ent :db/id id)))
+               {}
+               new-ents)
+         _ (assert (= (set (keys ents))
+                      (set (keys valid-ids)))
+                   (pr-str (count (set (keys ents)))
+                           (count (set (keys valid-ids)))
+                           (count new-ents)))
+         data (-> (reduce
+                   (fn [acc [k attr val]]
+                     (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
+                                                         k
+                                                         (get valid-ids k)
+                                                         " in "
+                                                         (keys valid-ids)))
+                     (assoc-in acc [k attr] val))
+                   ents
+                   updates)
+                  vals)
+         _ (println "Datoms to insert: " (reduce + (map count data)))
+         _ (println "Entities to insert: " (count data))
+         {:keys [db-before db-after tempids tx-data]}
+         @(d/transact conn data)
+         ptempids (zipmap
+                   (keys (:tempids plan))
+                   (map (partial d/resolve-tempid db-after tempids)
+                        (vals (:tempids plan))))]
+     (assoc plan
+       :tempids ptempids
+       :db db-after
+       :db-before db-before
+       :new-ents nil
+       :singletons nil))))
 
 (defn plan-id 
   [plan val]
@@ -261,6 +266,7 @@
       (fn [plan]
         (let [newid (d/tempid :db.part/user)
               ent (assoc ent :db/id newid)]
+          (assert (not= 1 (count ent)) (str "Cannot assert a empty entity " ent))
           [newid (-> plan
                      (assoc-in [:new-ents ent] newid)
                      (assoc-in [:tempids key] newid)
@@ -299,6 +305,7 @@
   (fn [plan]
     (reduce
      (fn [[ids plan] [ent key]]
+       (assert (not= 0 (count ent)) "Cannot assert an empty entity")
        (let [[id plan] ((assert-entity ent key) plan)]
             [(conj ids id) plan]))
      [[] plan]
@@ -381,8 +388,10 @@
      (reverse seq))))
 
 ;; True ssa stuff here, blocks instructions etc.
-(defn add-block [fn]
-  (let [blk {:block/fn fn}]
+(defn add-block [fn-id nm]
+  (let [blk {:block/fn fn-id
+             :block/name nm
+             :node/type :node.type/block}]
     (gen-plan
      [blk (assert-entity blk blk)]
      blk)))
@@ -398,7 +407,7 @@
 
 (defn add-entry-block [fn-id]
   (gen-plan
-   [blk (add-block fn-id)
+   [blk (add-block fn-id "entry")
     _ (assoc-plan :block-id blk)
     _ (update-entity fn-id :fn/entry-block blk)]
    blk))
@@ -411,7 +420,6 @@
   "Adds a phi node to a block. In Mjolnir phi nodes are always attached to the start of a block.
 The order of the nodes cannot be set, as it shouldn't matter in the output seimantics of the code"
   []
-  (println "phi.......")
   (gen-plan
    [block (get-block)
     phi-id (assert-entity {:node/type :node.type/phi
@@ -432,6 +440,7 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
 (defn terminate-block
   "Sets the terminator instruction for a block"
   [inst & args]
+  {:pre (every? (complement nil?) args)}
   (gen-plan
    [block (get-block)
     inst (assert-entity (reduce

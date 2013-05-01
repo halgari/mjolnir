@@ -8,6 +8,10 @@
   (q '[:find ?id ?attr ?val
        :in $ %
        :where
+       [?id :node/type _]
+       [(datomic.api/entity $ ?id) ?ent]
+       [(:node/return-type ?ent) ?rval]
+       [(nil? ?rval)]
        (infer-node ?id ?attr ?val)]
      db
      @rules))

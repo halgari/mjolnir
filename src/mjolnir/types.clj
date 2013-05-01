@@ -145,7 +145,7 @@
   (add-to-plan [this]
     (gen-plan
      [tp (add-to-plan etype)
-      this-id (singleton {:node/type :type.pointer
+      this-id (singleton {:node/type :type/pointer
                           :type/element-type tp}
                          this)]
      this-id)))

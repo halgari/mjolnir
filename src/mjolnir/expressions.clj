@@ -87,6 +87,7 @@
       ptr (write-ssa ptr)
       casted (add-instruction :inst.type/cast
                               {:inst.cast/type tp-id
+                               :inst.arg/arg0 ptr
                                :node/return-type tp-id})]
      casted)))
 
@@ -502,19 +503,19 @@
       test-id (write-ssa test)
       test-block (get-block)
       
-      pre-then-block (add-block fnc)
+      pre-then-block (add-block fnc "then")
       _ (set-block pre-then-block)
       then-val (write-ssa then)
       post-then-block (get-block)
       then-terminated? (terminated? post-then-block)
       
-      pre-else-block (add-block fnc)
+      pre-else-block (add-block fnc "else")
       _ (set-block pre-else-block)
       else-val (write-ssa else)
       post-else-block (get-block)
       else-terminated? (terminated? post-else-block)
 
-      merge-block (add-block fnc)
+      merge-block (add-block fnc "merge")
       _ (set-block merge-block)
       phi-val (add-phi)
 
@@ -705,8 +706,6 @@
                 (first exprs)
                 (next exprs))
         build)))
-
-
 (defrecord *Op [exprs]
   Validatable
   (validate [this]
@@ -729,66 +728,12 @@
 
 
 (defrecord Loop [itms body]
-  Validatable
-  (validate [this]
-    (doseq [[nm init] itms]
-      (assure (string? nm))
-      (assure (valid? init)))
-    (binding [*locals* (merge *locals*
-                              (zipmap (map first itms)
-                                      (map (comp return-type second) itms)))
-              *recur-point* (map (comp return-type second) itms)]
-      (assure (valid? body))))
-  Expression
-  (return-type [this]
-    (binding [*locals* (merge *locals*
-                              (zipmap (map first itms)
-                                      (map (comp return-type second) itms)))]
-      (return-type body)))
-  (build [this]
-    (binding [*locals* (merge *locals*
-                              (zipmap (map first itms)
-                                      (map (comp return-type second) itms)))
-              *recur-point* (map (comp return-type second) itms)]
-      (let [inits (doall (map (fn [itm]
-                                (build itm))
-                              (map second itms)))
-            loopblk (llvm/AppendBasicBlock *llvm-fn* (genname "loop_"))
-            endblk (llvm/AppendBasicBlock *llvm-fn* (genname "loopexit_"))
-            _ (llvm/BuildBr *builder* loopblk)
-            _ (llvm/PositionBuilderAtEnd *builder* loopblk)
-            fromblk @*block*
-            _ (reset! *block* loopblk)
-            phis (doall (map (fn [[built exp]]
-                               (let [phi (llvm/BuildPhi *builder*
-                                                    (llvm-type (return-type exp))
-                                                    (genname "loopval_"))]
-                                 (llvm/AddIncoming phi
-                                                   (into-array Pointer [built])
-                                                   (into-array Pointer [fromblk])
-                                                   1)
-                                 phi))
-                             (map vector inits (map second itms))))]
-                    
-            
-       
-        (binding [*llvm-locals* (merge *llvm-locals*
-                                       (zipmap (map first itms)
-                                               phis))
-                  *llvm-recur-point* loopblk
-                  *llvm-recur-phi* phis]
-          
-          (let [ret (build body)]
-            (llvm/BuildBr *builder* endblk)
-            (reset! *block* endblk)
-            (llvm/PositionBuilderAtEnd *builder* endblk)
-            ret)))))
   SSAWriter
   (write-ssa [this]
     (gen-plan
      [fnc (get-in-plan [:state :fn])
       itm-ids (add-all (map (comp write-ssa second) itms))
-      recur-pnt (add-block fnc)
+      recur-pnt (add-block fnc "body")
       _ (terminate-block :inst.type/jmp recur-pnt)
       prev-block (get-block)
       _ (set-block recur-pnt)
@@ -799,7 +744,6 @@
                          phis
                          itm-ids))
       _ (apply push-alter-binding :locals assoc (mapcat (fn [[nm _] val]
-                                                          (println "->>>> " nm "  " val)
                                                           [nm val])
                                                         itms
                                                         phis))
@@ -809,12 +753,10 @@
       _ (pop-binding :recur-phis)
       _ (pop-binding :recur)
       _ (pop-binding :locals)
-      end-block (add-block fnc)
+      end-block (add-block fnc "end")
       _ (terminate-block :inst.type/jmp end-block)
       _ (set-block end-block)]
-     (do
-       (println "phis----" phis)
-       return-val))))
+     return-val)))
 
 (defrecord Let [nm bind body]
   Validatable
@@ -844,17 +786,6 @@
       _ (pop-binding :locals)]
      val)))
 
-(defrecord Malloc-old [type cnt]
-  Validatable
-  (validate [this]
-    (assure (type? type))
-    (assure (integer? cnt)))
-  Expression
-  (return-type [this]
-    (->ArrayType type cnt))
-  (build [this]
-    (llvm/BuildMalloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
-
 (defrecord Malloc [type]
   SSAWriter
   (write-ssa [this]
@@ -875,18 +806,6 @@
                                {:inst.arg/arg0 itm
                                 :node/return-type void})]
      inst-id)))
-
-#_(defrecord Alloc [type cnt]
-  Validatable
-  (validate [this]
-    (assure (type? type))
-    (assure (integer? cnt)))
-  Expression
-  (return-type [this]
-    (->ArrayType type cnt))
-  (build [this]
-    (llvm/BuildAlloc *builder* (llvm-type (->ArrayType type cnt)) (genname "malloc_"))))
-
 
 (defrecord ASet [arr idx val]
   Validatable
@@ -1088,28 +1007,6 @@
           (llvm/BuildStore *builder* (build (nth vals idx)) gep)))
       malloc)))
 
-(defrecord Recur-old [items]
-  Validatable
-  (validate [this]
-    (assure (= (count items) (count *recur-point*)))
-    (assure (type? type))
-    (dotimes [x (count items)]
-      (let [itm (nth items x)
-            rp-itm (nth *recur-point* x)]
-        (assure-same-type (return-type itm) rp-itm))))
-  Expression
-  (return-type [this]
-    type)
-  (build [this]
-    (let [d (mapv build items)]
-      (llvm/BuildBr *builder* *llvm-recur-point*)
-      (dotimes [idx (count *llvm-recur-phi*)]
-        (llvm/AddIncoming (nth *llvm-recur-phi* idx)
-                          (into-array Pointer [(nth d idx)])
-                          (into-array Pointer [@*block*])
-                          1))
-      :terminated)))
-
 (defrecord Recur [items]
   SSAWriter
   (write-ssa [this]
@@ -1118,24 +1015,12 @@
       this-block (get-block)
       phis (get-binding :recur-phis)
       _ (add-all (map (fn [phi val]
-                        (println "<---" phi " ")
                         (add-to-phi phi this-block val))
                       phis
                       item-ids))
       recur-pnt (get-binding :recur)
       _ (terminate-block :inst.type/jmp recur-pnt)]
      nil)))
-
-(defrecord Free-old [val]
-  Validatable
-  (validate [this]
-    (ElementPointer? (return-type val)))
-  Expression
-  (return-type [this]
-    Int32)
-  (build [this]
-    (llvm/BuildFree *builder* (build val))
-    (build 0)))
 
 (defrecord Do [body]
   Validatable
@@ -1174,7 +1059,6 @@
         gbl)))
   GlobalExpression
   (stub-global [this]
-    (println name)
     (llvm/AddGlobalInAddressSpace *module*
                     (llvm-type type)
                     name

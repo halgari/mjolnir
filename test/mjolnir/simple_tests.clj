@@ -10,7 +10,9 @@
    [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
                           ->FunctionType VoidT ->ArrayType]]
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
-                                ->ASet ->AGet ->Do ->Module]]))
+                                ->ASet ->AGet ->Do ->Module]]
+   [mjolnir.constructors-init :as const])
+  (:alias c mjolnir.constructors))
 
 
 (deftest compile-add-one-function
@@ -26,7 +28,7 @@
           (get-plan conn)
           commit)
       (dotimes [x 3] (infer-all conn))      
-      (dump (build (db conn))))))
+      (build (db conn)))))
 
 
 (deftest compile-fib-function
@@ -49,8 +51,8 @@
           commit)
       (dotimes [x 3] (infer-all conn))
       (validate (db conn))
-      (dump (let [x (build (db conn))]
-              x)))))
+      (let [x (build (db conn))]
+        x))))
 
 
 
@@ -69,8 +71,8 @@
           commit)
       (dotimes [x 3] (infer-all conn))
       (validate (db conn))
-      (dump (let [x (build (db conn))]
-              x)))))
+      (let [x (build (db conn))]
+        x))))
 
 (deftest compile-count-to-ten-function
   (binding [*int-type* Int64
@@ -89,9 +91,9 @@
           commit)
       (infer-all conn)
       (validate (db conn))
-      (dump (let [x (build (db conn))]
+      (let [x (build (db conn))]
 
-              x)))))
+        x))))
 
 (deftest compile-aget-aset-function
   (binding [*int-type* Int64
@@ -112,8 +114,8 @@
           commit)
       (infer-all conn)
       (validate (db conn))
-      (dump (let [x (build (db conn))]
-              x)))))
+      (let [x (build (db conn))]
+        x))))
 
 (deftest compile-module
   (binding [*int-type* Int64
@@ -131,9 +133,31 @@
           commit)
       (infer-all conn)
       (validate (db conn))
-      (dump (let [x (build (db conn))]
-              x)))))
+      (let [x (build (db conn))]
+        x))))
 
+
+(deftest compile-dotimes
+  (binding [*int-type* Int64
+            *target* (default-target)]
+    (let [conn (new-db)
+          ft (->FunctionType [Int64] Int64)
+          fnc (->Fn "fib" ft ["x"]
+                    (c/if (c/= 1 2)
+                          (c/loop [x 42]
+                                  42)
+                          42))]
+      (-> (gen-plan
+           [f-id (add-to-plan fnc)]
+           f-id)
+          (get-plan conn)
+          commit)
+      (infer-all conn)
+      (validate (db conn))
+      (let [x (build (db conn))]
+        (dump x)
+        (verify x)
+        x))))
 
 
 
