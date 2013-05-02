@@ -160,6 +160,7 @@
          (merge
           {:db/id (d/tempid :db.part/db)
            :db/ident id
+           :db/index true
            :db.install/_attribute :db.part/db}
           (reduce
            (fn [m attr]
