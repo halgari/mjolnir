@@ -316,7 +316,7 @@
 (defmethod build-instruction :inst.type/binop
   [d module builder fn inst defs]
   (let [llvm-op (binop->llvm-binop (:inst.binop/sub-type inst))]
-    (assert llvm-op (str "no map for:  " (:inst.binop/sub-type inst)))
+    (assert llvm-op (str "no binop-map for:  " (pr-str (:inst.binop/sub-type inst) (keys inst))))
     (unpack-args defs inst
                  [lh rh]
                  (llvm/BuildBinOp builder llvm-op lh rh (gen-op-name inst)))))
