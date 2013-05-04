@@ -11,7 +11,8 @@
                           ->FunctionType VoidT ->ArrayType]]
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
                                 ->ASet ->AGet ->Do ->Module]]
-   [mjolnir.constructors-init :as const])
+   [mjolnir.constructors-init :refer [defnf]]
+   [mjolnir.core :refer [to-db to-llvm-module]])
   (:alias c mjolnir.constructors))
 
 
@@ -160,5 +161,17 @@
         x))))
 
 
+    (defnf defnf-fib [Int64 x -> Int64]
+      (if (< x 2)
+        x
+        (+ (defnf-fib (dec x))
+           (defnf-fib (- x 2)))))
+
+(deftest compile-constructor
+  (binding [*int-type* Int64
+            *target* (default-target)]
+    (-> (c/module ['mjolnir.simple-tests/defnf-fib])
+        to-db
+        to-llvm-module)))
 
 

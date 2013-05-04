@@ -79,6 +79,8 @@
    :type/element-type #{:one :ref}
    :type/length #{:one :int}
 
+   :type/unknown #{:one :keyword}
+
    :error/key #{:one :keyword}
    :error/calue #{:one :string}
 
@@ -413,6 +415,13 @@
     _ (update-entity fn-id :fn/entry-block blk)]
    blk))
 
+
+(defn no-type []
+  (gen-plan
+   [a (singleton {:node/type :node.type/unknown})]
+   a))
+
+
 (defn get-block []
   (fn [plan]
     [(:block-id plan) plan]))
@@ -422,10 +431,12 @@
 The order of the nodes cannot be set, as it shouldn't matter in the output seimantics of the code"
   []
   (gen-plan
-   [block (get-block)
+   [no-type-id (no-type)
+    block (get-block)
     phi-id (assert-entity {:node/type :node.type/phi
                            :phi/block block
-                           :inst/type :inst.type/phi})]
+                           :inst/type :inst.type/phi
+                           :node/return-type no-type-id})]
    phi-id))
 
 (defn add-to-phi
@@ -461,6 +472,7 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
    [term (get-in-plan [:state block])]
    term))
 
+
 (defn add-instruction
   ([instruction attrs-map]
      (add-instruction instruction attrs-map nil))
@@ -471,12 +483,16 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
          ((add-instruction block-id prev-instruction-id instruction attrs-map key) plan))))
   ([block-id prev-instruction-id instruction attrs-map key]
      (gen-plan
-      [inst-id (assert-entity
-                (merge
-                 {:inst/block block-id
-                  :inst/type instruction
-                  :node/type :node.type/inst}
-                 attrs-map)
+      [no-type-id (no-type)
+       inst-id (assert-entity
+                (let [mp (merge
+                          {:inst/block block-id
+                           :inst/type instruction
+                           :node/type :node.type/inst}
+                          attrs-map)]
+                  (if (:node/return-type mp)
+                    mp
+                    (assoc mp :node/return-type no-type-id)))
                        key)
        _ (if prev-instruction-id
            (update-entity prev-instruction-id :inst/next inst-id)

@@ -267,7 +267,7 @@
                                this)]
      this-id)))
 
-(defrecord Argument [idx tp]
+#_(defrecord Argument [idx tp]
   Validatable
   (validate [this]
     (assure (argument *fn* idx)))
@@ -280,7 +280,7 @@
   (write-ssa [this]
     (gen-plan
      [this-id (add-instruction :inst.type/argument
-                               {:inst.argument/idx idx})]
+                               {:argument/idx idx})]
      this-id)))
 
 (defrecord FnArgument [arg-name arg-idx arg-type]

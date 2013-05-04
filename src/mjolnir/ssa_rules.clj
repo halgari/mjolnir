@@ -36,7 +36,9 @@
 
 (defrule return-type [?id ?type]
   "Anything with :node/return-type returns that type"
-  [?id :node/return-type ?type])
+  [?id :node/return-type ?type]
+  [?no-type :node/type :node.type/unknown]
+  [(not= ?type ?no-type)])
 
 (defrule return-type [?id ?type]
   "Consts return their given type, if it exists"
@@ -51,15 +53,18 @@
   (return-type ?arg0 ?type)
   (return-type ?arg1 ?type))
 
-(defrule return-type [?id ?type]
-  "Cmp operations always return Int1"
-  [?id :inst/type :inst.type/cmp]
-  [?id :node/return-type ?type])
+(defrule infer-phi-return-type [?id ?type]
+  "Phi nodes always return the return type of one of their values"
+  [?phi :phi.value/node ?id]
+  [?phi :phi.value/value ?arg]
+  [?arg :node/return-type ?type]
+  #_(return-type ?arg ?type))
 
 (defrule return-type [?id ?type]
   "Phi nodes always return the return type of one of their values"
-  [?phi :phi.value/value ?arg]
   [?phi :phi.value/node ?id]
+  [?phi :phi.value/value ?arg]
+  #_[?arg :node/return-type ?type]
   (return-type ?arg ?type))
 
 (defrule return-type [?id ?type]
@@ -86,17 +91,12 @@
   [?arg-node :fn.arg/idx ?idx]
   [?arg-node :fn.arg/type ?type])
 
-(defn debug-datalog [x]
-  (println "datalong -----------------   " x)
-  x)
-
 (defrule return-type [?id ?type]
   "ASet returns the arr type"
   [?id :inst/type :inst.type/aset]
   [?id :inst.arg/arg0 ?arg0]
   [?arg0 :inst/type ?v]
-  (return-type ?arg0 ?type)
-)
+  (return-type ?arg0 ?type))
 
 (defrule return-type [?id ?type]
   "AGet returns the element type"
@@ -159,6 +159,45 @@
   [?arg1-t :node/type :type/float]
   [?type :inst.binop/type ?binop]
   [(mjolnir.ssa-rules/binop-float-translation ?binop) ?op])
+
+
+;; Cast subtype
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Larger Ints truncate to smaller ints"
+  [?arg0-t :node/type :type/int]
+  [?arg1-t :node/type :type/int]
+  [?arg0-t :type/length ?arg0-length]
+  [?arg1-t :type/length ?arg1-length]
+  [(> ?arg0-length ?arg1-length)]
+  [(identity :inst.cast.type/trunc) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Larger Ints truncate to smaller ints"
+  [?arg0-t :node/type :type/int]
+  [?arg1-t :node/type :type/int]
+  [?arg0-t :type/length ?arg0-length]
+  [?arg1-t :type/length ?arg1-length]
+  [(< ?arg0-length ?arg1-length)]
+  [(identity :inst.cast.type/zext) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Larger Ints truncate to smaller ints"
+  [?arg0-t :node/type :type/pointer]
+  [?arg1-t :node/type :type/pointer]
+  [(identity :inst.cast.type/bitcast) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Larger Ints truncate to smaller ints"
+  [?arg0-t :node/type :type/pointer]
+  [?arg1-t :node/type :type/int]
+  [(identity :inst.cast.type/ptr-to-int) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Larger Ints truncate to smaller ints"
+  [?arg0-t :node/type :type/int]
+  [?arg1-t :node/type :type/pointer]
+  [(identity :inst.cast.type/int-to-ptr) ?op])
 
 
 

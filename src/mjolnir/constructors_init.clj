@@ -49,8 +49,7 @@
                  :linkage ~linkage
             :name ~name
                  :body (let ~(vec (mapcat (fn [x idx] `[~x
-                                                        (exp/->Argument ~idx
-                                                                        (nth (:arg-types ~tp) ~idx))])
+                                                        (exp/->Arg ~idx)])
                                      args
                                      (range)))
                     (if ~(empty? body)
@@ -275,3 +274,45 @@
         nvar))))
 
 
+(defn- constructor [sym]
+  (let [s (symbol (str "c-" (name sym)))
+        var ((ns-publics (the-ns 'mjolnir.constructors-init)) s)]
+    (println "|" s var "|")
+    var))
+
+(defn- constructor? [sym]
+  (println "<" sym (not (nil? (constructor sym))) ">")
+  (not (nil? (constructor sym))))
+
+(declare convert-form)
+
+(defn- convert-form-1 [x]
+  (cond
+   (seq? x)
+   (convert-form x)
+   
+   (vector? x)
+   (into [] (convert-form x))
+
+   (map? x)
+   (into {} (convert-form x))
+
+   (set? x)
+   (into #{} (convert-form x))
+
+   (and (symbol? x)
+        (constructor? x))
+   (symbol "mjolnir.constructors-init" (str "c-" (name x)))
+   
+   
+   :else
+   x))
+
+(defn- convert-form [body]
+  (println "converting " body)
+  (doall (map convert-form-1 body)))
+
+(defmacro defnf [& body]
+  (cons
+   'mjolnir.constructors-init/c-defn
+   (doall (map convert-form-1 body))))
