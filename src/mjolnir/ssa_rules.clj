@@ -22,6 +22,8 @@
 
 (defrule infer-node [?id ?attr ?val]
   "infer return-types"
+  [?no-type :node/type :node.type/unknown]
+  [?id :node/return-type ?no-type]
   (return-type ?id ?val)
   [(identity :node/return-type) ?attr])
 
@@ -30,6 +32,15 @@
   (infer-binop ?id ?val)
   [(identity :inst.binop/sub-type) ?attr])
 
+
+(defrule infer-cast [?id ?attr ?val]
+  "infer casts"
+  [?id :inst/type :inst.type/cast]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?arg0-t)
+  [?id :node/return-type ?return-type]
+  (cast-subtype ?id ?arg0-t ?arg1-t ?val)
+  [(identity :inst.cast/subtype) ?attr])
 
 ;;
 
@@ -50,7 +61,7 @@
   [?id :inst/type :inst.type/binop]
   [?id :inst.arg/arg0 ?arg0]
   [?id :inst.arg/arg1 ?arg1]
-  (return-type ?arg0 ?type)
+  #_(return-type ?arg0 ?type)
   (return-type ?arg1 ?type))
 
 (defrule infer-phi-return-type [?id ?type]
@@ -137,7 +148,9 @@
    :inst.binop.type/sub :inst.binop.subtype/isub
    :inst.binop.type/mul :inst.binop.subtype/imul
    :inst.binop.type/div :inst.binop.subtype/idiv
-   :inst.binop.type/rem :inst.binop.subtype/irem})
+   :inst.binop.type/rem :inst.binop.subtype/irem
+   :inst.binop.type/and :inst.binop.subtype/and
+   :inst.binop.type/or :inst.binop/subtype/or})
 
 (def binop-float-translation
   {:inst.binop.type/add :inst.binop.subtype/fadd
@@ -201,4 +214,35 @@
 
 
 
+;; Cmp predicate inference
 
+
+(def cmp-map
+  {[:type/int :type/int :inst.cmp.pred/=] :inst.cmp.sub-pred/int-eq
+   [:type/int :type/int :inst.cmp.pred/not=] :inst.cmp.sub-pred/int-ne
+   [:type/int :type/int :inst.cmp.pred/>] :inst.cmp.sub-pred/int-sgt
+   [:type/int :type/int :inst.cmp.pred/<] :inst.cmp.sub-pred/int-slt
+   [:type/int :type/int :inst.cmp.pred/<=] :inst.cmp.sub-pred/int-sle
+   [:type/int :type/int :inst.cmp.pred/>=] :inst.cmp.sub-pred/int-sge
+
+   [:type/float :type/float :inst.cmp.pred/=] :inst.cmp.sub-pred/real-oeq
+   [:type/float :type/float :inst.cmp.pred/not=] :inst.cmp.sub-pred/real-one
+   [:type/float :type/float :inst.cmp.pred/>] :inst.cmp.sub-pred/real-ogt
+   [:type/float :type/float :inst.cmp.pred/<] :inst.cmp.sub-pred/real-olt
+   [:type/float :type/float :inst.cmp.pred/<=] :inst.cmp.sub-pred/real-ole
+   [:type/float :type/float :inst.cmp.pred/>=] :inst.cmp.sub-pred/real-oge})
+
+(defrule infer-node [?id ?attr ?val]
+  "Infer cmp predicate"
+  [?id :inst/type :inst.type/cmp]
+  [(println "foo" ?id) ?v]
+  [?id :inst.arg/arg0 ?arg0]
+  [?id :inst.arg/arg1 ?arg1]
+  [?id :inst.cmp/pred ?pred]
+  (return-type ?arg0 ?arg0-t)
+  (return-type ?arg1 ?arg1-t)
+  [?arg0-t :node/type ?arg0-tg]
+  [?arg1-t :node/type ?arg1-tg]
+  [(vector ?arg0-tg ?arg1-tg ?pred) ?key]
+  [(mjolnir.ssa-rules/cmp-map ?key) ?val]
+  [(identity :inst.cmp/sub-pred) ?attr])

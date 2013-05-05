@@ -126,6 +126,7 @@
 (defnative Pointer LLVMBuildArrayMalloc)
 (defnative Pointer LLVMBuildGEP)
 (defnative Pointer LLVMBuildBitCast)
+(defnative Pointer LLVMBuildCast)
 (defnative Pointer LLVMConstString)
 (defnative Pointer LLVMConstInt)
 (defnative Integer LLVMCountStructElementTypes)
@@ -302,8 +303,6 @@
    LLVMLinkerPrivateWeakDefAutoLinkage]) ; Like LinkerPrivateWeak, but possibly hidden. 
 
 
-(def LLVMIntEQ 32)
-
 (defenum LLVMIntPredicate
   32
   [LLVMIntEQ
@@ -372,7 +371,7 @@
    LLVMStore
    LLVMGetElementPtr
    ;; Cast Operators
-   LLVMTruc
+   LLVMTrunc
    LLVMZExt
    LLVMSExt
    LLVMFPToUI

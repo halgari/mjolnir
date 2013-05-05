@@ -17,7 +17,7 @@
           (next exprs)))
 
 (defn c-* [& exprs]
-  (exp/->*Op exprs))
+  (gen-binops :* exprs))
 
 (defn c-+ [& exprs]
   (gen-binops :+ exprs))
@@ -25,10 +25,11 @@
 (defn c-- [& exprs]
   (gen-binops :- exprs))
 
+(defn c-div [& exprs]
+  (gen-binops :div exprs))
+
 (defn c-and [& exprs]
-  (reduce exp/->And
-          (first exprs)
-          (next exprs)))
+  (gen-binops :and exprs))
 
 #_(defn c-module
   [& body]
@@ -151,8 +152,8 @@
 (defn c-eset [vec idx val]
   (exp/->ESet vec idx val))
 
-(defn c-bitcast [a tp]
-  (exp/->BitCast a tp))
+(defn c-cast [tp a]
+  (exp/->Cast tp a))
 
 (defmacro c-local [nm]
   `(exp/->Local ~(name nm)))
@@ -263,6 +264,17 @@
                 ~tp))))
 
 
+(defmacro c-for [[var [from to step]] & body]
+  `(c-let [to# ~to]
+          (c-loop [~var ~from]
+                  (c-if (c-< ~var to#)
+                        (c-do ~@body
+                              (c-recur (c-+ ~var ~step)))
+                        ~var))))
+
+
+
+
 ;; Black magic is here
 (let [ns (create-ns 'mjolnir.constructors)]
   (doseq [[nm var] (ns-publics *ns*)]
@@ -275,13 +287,15 @@
 
 
 (defn- constructor [sym]
-  (let [s (symbol (str "c-" (name sym)))
+  (let [sym (if (= (name sym) "/")
+              (symbol "div")
+              sym)
+        s (symbol (str "c-" (name sym)))
         var ((ns-publics (the-ns 'mjolnir.constructors-init)) s)]
-    (println "|" s var "|")
+    (println s)
     var))
 
 (defn- constructor? [sym]
-  (println "<" sym (not (nil? (constructor sym))) ">")
   (not (nil? (constructor sym))))
 
 (declare convert-form)
@@ -302,14 +316,15 @@
 
    (and (symbol? x)
         (constructor? x))
-   (symbol "mjolnir.constructors-init" (str "c-" (name x)))
+   (symbol "mjolnir.constructors-init" (str "c-" (if (= (name x) "/")
+                                                   "div"
+                                                   (symbol x))))
    
    
    :else
    x))
 
 (defn- convert-form [body]
-  (println "converting " body)
   (doall (map convert-form-1 body)))
 
 (defmacro defnf [& body]

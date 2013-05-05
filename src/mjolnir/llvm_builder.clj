@@ -76,6 +76,11 @@
 (defmethod build-type :type/int
   [x]
   (llvm/IntType (:type/width x)))
+
+(defmethod build-type :type/float
+  [x]
+  (llvm/FloatType (:type/width x)))
+
 (defmethod encode-const :type/int
   [tp val]
   (llvm/ConstInt (build-type tp) val))
@@ -311,12 +316,17 @@
    :inst.binop.subtype/fsub llvm/LLVMFSub
    :inst.binop.subtype/fmul llvm/LLVMFMul
    :inst.binop.subtype/fdiv llvm/LLVMFDiv
-   :inst.binop.subtype/fmod llvm/LLVMFRem})
+   :inst.binop.subtype/fmod llvm/LLVMFRem
+   :inst.binop.subtype/and llvm/LLVMAnd
+   :inst.binop.subtype/or llvm/LLVMOr})
 
 (defmethod build-instruction :inst.type/binop
   [d module builder fn inst defs]
   (let [llvm-op (binop->llvm-binop (:inst.binop/sub-type inst))]
-    (assert llvm-op (str "no map for:  " (:inst.binop/sub-type inst)))
+    (assert llvm-op (str "no binop map for:  "
+                         (:inst.binop/sub-type inst)
+                         " "
+                         (:inst.binop/type inst)))
     (unpack-args defs inst
                  [lh rh]
                  (llvm/BuildBinOp builder llvm-op lh rh (gen-op-name inst)))))
@@ -333,16 +343,50 @@
                [test then else]
                (llvm/BuildCondBr builder test then else)))
 
+(def cmp-table
+  {:inst.cmp.sub-pred/int-eq llvm/LLVMIntEQ
+   :inst.cmp.sub-pred/int-ne llvm/LLVMIntNE
+   :inst.cmp.sub-pred/int-ugt llvm/LLVMIntUGT
+   :inst.cmp.sub-pred/int-uge llvm/LLVMIntUGE
+   :inst.cmp.sub-pred/int-ult llvm/LLVMIntULT
+   :inst.cmp.sub-pred/int-ule llvm/LLVMIntULE
+   :inst.cmp.sub-pred/int-sgt llvm/LLVMIntSGT
+   :inst.cmp.sub-pred/int-sge llvm/LLVMIntSGE
+   :inst.cmp.sub-pred/int-slt llvm/LLVMIntSLT
+   :inst.cmp.sub-pred/int-sle llvm/LLVMIntSLE
 
+   :inst.cmp.sub-pred/real-predicate-false llvm/LLVMRealPredicateFalse
+   :inst.cmp.sub-pred/real-oeq llvm/LLVMRealOEQ
+   :inst.cmp.sub-pred/real-ogt llvm/LLVMRealOGT
+   :inst.cmp.sub-pred/real-oge llvm/LLVMRealOGE
+   :inst.cmp.sub-pred/real-ole llvm/LLVMRealOLE
+   :inst.cmp.sub-pred/real-one llvm/LLVMRealONE
+   :inst.cmp.sub-pred/real-ord llvm/LLVMRealORD
+   :inst.cmp.sub-pred/real-uno llvm/LLVMRealUNO
+   :inst.cmp.sub-pred/real-ueq llvm/LLVMRealUEQ
+   :inst.cmp.sub-pred/real-ugt llvm/LLVMRealUGT
+   :inst.cmp.sub-pred/real-uge llvm/LLVMRealUGE
+   :inst.cmp.sub-pred/real-ult llvm/LLVMRealULT
+   :inst.cmp.sub-pred/real-ule llvm/LLVMRealULE
+   :inst.cmp.sub-pred/real-une llvm/LLVMRealUNE
+   :inst.cmp.sub-pred/real-predicate-true llvm/LLVMRealOEQ})
 
 (defmethod build-instruction :inst.type/cmp
   [d module builder fn inst defs]
-  (let [lh (defs (:inst.arg/arg0 inst))
-        rh (defs (:inst.arg/arg1 inst))]
-    (assert (and lh rh))
-    (assoc defs
-      inst
-      (llvm/BuildICmp builder llvm/LLVMIntSLE lh rh (str "cmp_" (:db/id inst))))))
+  (unpack-args defs inst
+               [lh rh]
+               (let [sub-type (cmp-table (:inst.cmp/sub-pred inst))]
+                 (assert sub-type (pr-str "Invalid cmp type" [(:inst.cmp/sub-pred inst)
+                                                              (:inst.cmp/pred inst)
+                                                              (-> inst
+                                                                  :inst.arg/arg0
+                                                                  :node/return-type
+                                                                  :node/type)
+                                                              (-> inst
+                                                                  :inst.arg/arg1
+                                                                  :node/return-type
+                                                                  :node/type)]))
+                 (llvm/BuildICmp builder sub-type lh rh (str "cmp_" (:db/id inst))))))
 
 (defmethod build-instruction :inst.type/return-val
   [d module builder fn inst defs]
@@ -430,14 +474,25 @@
                                         (str "gep_" (:db/id inst)))]
                  (llvm/BuildLoad builder gep (str "load_" (:db/id inst))))))
 
+(def cast-table
+  {:inst.cast.type/fp-to-si llvm/LLVMFPToSI
+   :inst.cast.type/si-to-fp llvm/LLVMSIToFP
+   :inst.cast.type/trunc llvm/LLVMTrunc
+   :inst.cast.type/zext llvm/LLVMZExt
+   :inst.cast.type/bitcast llvm/LLVMBitcast
+   :inst.cast.type/ptr-to-int llvm/LLVMPtrToInt
+   :inst.cast.type/int-to-ptr llvm/LLVMIntToPtr})
+
 (defmethod build-instruction :inst.type/cast
   [d module builder fn inst defs]
   (unpack-args defs inst
-               [ptr]
+               [val]
                (let [to-type (-> inst
                                  :node/return-type
-                                 build-type)]
-                 (llvm/BuildBitCast builder ptr to-type (str "cast_" (:db/id inst))))))
+                                 build-type)
+                     sub-type (cast-table (:inst.cast/type inst))]
+                 (assert sub-type (str "Unknown subtype for" inst))
+                 (llvm/BuildCast builder sub-type val to-type (str "cast_" (:db/id inst))))))
 
 
 

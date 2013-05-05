@@ -69,25 +69,15 @@
                              key)]
      const)))
 
-(defrecord BitCast [ptr tp]
-  Validatable
-  (validate [this]
-    (assure (Expression? ptr))
-    (assure (type? tp)))
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (assert (not (keyword ptr)) ptr)
-    (llvm/BuildBitCast *builder* (build ptr) (llvm-type tp) (genname "bitcast_")))
+(defrecord Cast [tp expr]
   SSAWriter
   (write-ssa [this]
     (gen-plan
      [tp-id (add-to-plan tp)
-      ptr (write-ssa ptr)
+      expr-id (write-ssa expr)
       casted (add-instruction :inst.type/cast
                               {:inst.cast/type tp-id
-                               :inst.arg/arg0 ptr
+                               :inst.arg/arg0 expr-id
                                :node/return-type tp-id})]
      casted)))
 
@@ -208,37 +198,20 @@
          :>= llvm/LLVMRealOGE}})
 
 (defrecord Cmp [pred a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (Expression? a)
-    (Expression? b)
-    (assure-same-type (return-type a) (return-type b)))
-  Expression
-  (return-type [this]
-    Int1)
-  (build [this]
-    (let [[tp f]
-          (cond
-           (integer-type? (return-type a)) [:int llvm/BuildICmp]
-           (float-type? (return-type a)) [:float llvm/BuildFCmp]
-           (vector-type? (return-type a)) [:float llvm/BuildFCmp])]
-      (assert (pred (tp cmp-maps)) "Invalid predicate symbol")
-      (f *builder* (pred (tp cmp-maps)) (build a) (build b) (genname "cmp_"))))
   SSAWriter
   (write-ssa [this]
-    (gen-plan
-     [tp (add-to-plan Int1)
-      lh (write-ssa a)
-      rh (write-ssa b)
-      nd (add-instruction :inst.type/cmp
-                          {:node/return-type tp
-                           :inst.arg/arg0 lh
-                           :inst.arg/arg1 rh
-                           :inst.cmp/pred pred}
-                          nil)]
-     nd)))
+    (let [pred (keyword "inst.cmp.pred" (name pred))]
+      (gen-plan
+       [tp (add-to-plan Int1)
+        lh (write-ssa a)
+        rh (write-ssa b)
+        nd (add-instruction :inst.type/cmp
+                            {:node/return-type tp
+                             :inst.arg/arg0 lh
+                             :inst.arg/arg1 rh
+                             :inst.cmp/pred pred}
+                            nil)]
+       nd))))
 
 (defrecord Not [a]
   Validatable
@@ -338,7 +311,11 @@
 
 (def binop-maps
   {:+ :inst.binop.type/add
-   :- :inst.binop.type/sub})
+   :- :inst.binop.type/sub
+   :* :inst.binop.type/mul
+   :div :inst.binop.type/div
+   :and :inst.binop.type/and
+   :or :inst.binop.type/or})
 
 
 
@@ -910,7 +887,7 @@
                           member)
           _ (assert idx (pr-str "Idx error, did you validate first? " ptr " " member))
           bptr (build ptr)
-          cptr (build (->BitCast ptr  (->PointerType etp)))
+          cptr (build (->Cast (->PointerType etp) ptr))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "set_"))]
       (llvm/BuildStore *builder* (build val) gep)
       bptr)))
@@ -946,7 +923,7 @@
           idx (member-idx etp
                           member)
           _ (assert idx "Idx error, did you validate first?")
-          cptr (build (->BitCast ptr (->PointerType etp)))
+          cptr (build (->Cast (->PointerType etp) ptr))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "get_"))] 
       (llvm/BuildLoad *builder* gep (genname "load_")))))
 
@@ -1128,15 +1105,9 @@
     *float-type*)
   (build [this]
     (encode-const *float-type* this))
-  #_ (comment IToDatoms
-              (-to-datoms [this conn]
-                              (transact-new
-                               conn
-                               {:node/type :type/const
-                                :node/return-type (-> (-to-datoms
-                                                       *float-type*
-                                                       conn)
-                                                      :db/id)}))))
+  SSAWriter
+  (write-ssa [this]
+    (write-ssa (->Const *float-type* this))))
 
 
 

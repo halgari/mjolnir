@@ -15,7 +15,7 @@
     (time (concat (q '[:find ?id ?attr ?val
                        :in $ % ?notype
                        :where
-                       [?id :node/return-type ?notype]
+                       #_[?id :node/return-type ?notype]
                        (infer-node ?id ?attr ?val)]
                      db
                      @rules
@@ -46,8 +46,22 @@
                    nodes)])
     (println "infered" (count nodes) "nodes")
     (d/transact conn data)
-    (println "remaining" (count (q '[:find ?id
+    (let [remaining (q '[:find ?id
                                      :where
                                      [?id :node/return-type ?tp]
                                      [?tp :node/type :node.type/unknown]]
-                                   (db conn))))))
+                       (db conn))]
+      (when-not (= 0 (count remaining))
+        (println "Remaining nodes...")
+        (println (q '[:find ?nm
+                      :where
+                      [_ :fn/name ?nm]]
+                    (db conn)))
+        (doseq [node remaining]
+          (let [ent (d/entity db-val (first node))]
+            (println
+             [(:inst/type ent)
+              (:node/return-type (:inst/type ent))
+              (:node/return-type (:inst/type ent))
+              (:inst.gbl/name ent)])))
+        (assert false "inference fails")))))

@@ -1,13 +1,14 @@
 (ns examples.mandelbrot
   (:require [criterium.core :as crit])
-  (:require [mjolnir.constructors-init :as const]
+  (:require [mjolnir.constructors-init :refer [defnf]]
             [mjolnir.types :as types :refer [I8* Int64 Float32 Float32* Float64x4 Float64x4* VoidT]]
             [mjolnir.expressions :refer [build optimize dump ->ConstVector ->Do ->FPToSI ->SIToFP]]
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr]
             [mjolnir.targets.nvptx-intrinsics :refer [TID_X NTID_X CTAID_X TID_Y NTID_Y CTAID_Y]]
-            [mjolnir.targets.nvptx :as nvptx])
+            [mjolnir.targets.nvptx :as nvptx]
+            [mjolnir.core :refer [build-module]])
   (:alias c mjolnir.constructors)
   (:import [java.awt Color Image Dimension]
            [javax.swing JPanel JFrame SwingUtilities]
@@ -49,55 +50,48 @@
 
 ;; Mjolnir Method (no SSE)
 
-(c/defn square [Float32 x -> Float32]
-  (c/* x x))
+(defnf square [Float32 x -> Float32]
+  (* x x))
 
-(c/defn calc-iteration [Float32 xpx Float32 ypx Float32 max Float32 width Float32 height -> Float32]
-  (c/let [x0 (c/- (c/* (c/fdiv xpx width) 3.5) 2.5)
-          y0 (c/- (c/* (c/fdiv ypx height) 2.0) 1.0)]
-         (c/loop [iteration 0.0
-                  x 0.0
-                  y 0.0]
-                 (c/if (c/and (c/< (c/+ (square x)
-                                        (square y))
-                                   (square 2.0))
-                              (c/< iteration max))
-                       (c/recur (c/+ iteration 1.0)
-                                (c/+ (c/- (square x)
-                                          (square y))
-                                     x0)
-                                (c/+ (c/* 2.0 x y)
-                                     y0)
-                                -> Float32)
-                       iteration))))
 
-(defmacro lfor [[var [from to step] tp] & body]
-  `(c/let [to# ~to]
-          (c/loop [~var ~from]
-                  (c/if (c/< ~var to#)
-                        (c/do ~@body
-                              (c/recur (c/+ ~var ~step) ~'-> ~tp))
-                        ~var))))
 
-(c/defn ^:extern calc-mandelbrot [Float32* arr Float32 width Float32 height Float32 max -> Float32*]
-  (lfor [y [0.0 height 1.0] Float32]
-        (lfor [x [0.0 width 1.0] Float32]
-              (c/let [idx (->FPToSI (c/+ (c/* y width) x)
-                                    Int64)]
-                     (c/aset arr idx (c/fdiv (calc-iteration x y max width height) max)))))
+(defnf calc-iteration [Float32 xpx Float32 ypx Float32 max Float32 width Float32 height -> Float32]
+  (let [x0 (- (* (/ xpx width) 3.5) 2.5)
+        y0 (- (/ (/ ypx height) 2.0) 1.0)]
+    (loop [iteration 0.0
+           x 0.0
+           y 0.0]
+      (if (and (< (+ (square x)
+                     (square y))
+                  (square 2.0))
+               (< iteration max))
+        (recur (+ iteration 1.0)
+               (+ (- (square x)
+                     (square y))
+                  x0)
+               (+ (* 2.0 x y)
+                  y0))
+        iteration))))
+
+(defnf ^:extern calc-mandelbrot [Float32* arr Float32 width Float32 height Float32 max -> Float32*]
+  (for [y [0.0 height 1.0]]
+    (for [x [0.0 width 1.0]]
+      (let [idx (cast Int64 (+ (* y width) x))]
+        (aset arr idx (/ (calc-iteration x y max width height) max)))))
   arr)
 
-(c/defn ^:extern calc-mandelbrot-ptx [Float32* arr Float32 width Float32 height Float32 max -> VoidT]
-  (c/let [xpx (->SIToFP (c/+ (c/* (CTAID_X) (NTID_X))
-                             (TID_X))
-                        Float32)
-          ypx (->SIToFP (c/+ (c/* (CTAID_Y) (NTID_Y))
-                             (TID_Y))
-                        Float32)
-          idx (->FPToSI (c/+ (c/* ypx width) xpx)
-                        Int64)
-          c (calc-iteration xpx ypx max width height)]
-         (c/aset arr idx (c/fdiv c max))))
+(defnf ^:extern calc-mandelbrot-ptx [Float32* arr
+                                     Float32 width
+                                     Float32 height
+                                     Float32 max
+                                     -> VoidT]
+  (let [xpx (cast Float32 (+ (* (CTAID_X) (NTID_X))
+                             (TID_X)))
+        ypx (cast Float32 (+ (* (CTAID_Y) (NTID_Y))
+                             (TID_Y)))
+        idx (cast Int64 (+ (* ypx width) xpx))
+        c (calc-iteration xpx ypx max width height)]
+    (aset arr idx (/ c max))))
 
 (defn memory-to-array [^Memory m size]
   (let [arr (float-array size)]
@@ -202,20 +196,23 @@
 
 (defmethod run-command [:benchmark :mjolnir]
   [_ _]
-  (let [module (c/module ['examples.mandelbrot/square
-                          'examples.mandelbrot/calc-iteration
-                          'examples.mandelbrot/calc-mandelbrot])
-        built (optimize (build module))
-        _ (dump built)
-        dll (as-dll (config/default-target)
-                    built
-                    {:verbose true})
-        mbf (get dll calc-mandelbrot)
-        buf (Memory. (* SIZE 8))]
-    (assert (and mbf dll) "Compilation error")
-    (println "Running...")
-    (crit/bench
-     (mbf buf WIDTH HEIGHT 1000.0))))
+  (binding [config/*target* (nvptx/make-default-target)
+            config/*float-type* Float32
+            config/*int-type* Int64]
+    (let [module (c/module ['examples.mandelbrot/square
+                            'examples.mandelbrot/calc-iteration
+                            'examples.mandelbrot/calc-mandelbrot])
+          built (build-module module)
+          _ (dump built)
+          dll (as-dll (config/default-target)
+                      built
+                      {:verbose true})
+          mbf (get dll calc-mandelbrot)
+          buf (Memory. (* SIZE 8))]
+      (assert (and mbf dll) "Compilation error")
+      (println "Running...")
+      (crit/bench
+       (mbf buf WIDTH HEIGHT 1000.0)))))
 
 (defmethod run-command [:benchmark :java]
   [_ _]

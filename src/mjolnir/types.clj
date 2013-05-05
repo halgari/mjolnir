@@ -107,7 +107,7 @@
   (add-to-plan [this]
     (gen-plan
      [id (singleton
-          {:node/type :type.float
+          {:node/type :type/float
            :type/width width}
           this)]
      id)))

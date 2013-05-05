@@ -25,5 +25,9 @@
     (verify built)
     built))
 
+(defn build-module [m]
+  (-> (to-db m)
+      (to-llvm-module)))
+
 
 

@@ -94,6 +94,7 @@
    :inst.call/fn #{:one :ref}
 
    :inst.cmp/pred #{:one :keyword}
+   :isnt.cmp/sub-pred #{:one :keyword}
 
    :inst.malloc/type #{:one :ref}
 
@@ -101,13 +102,31 @@
    :inst.arg/arg0 #{:one :ref}
    :inst.arg/arg1 #{:one :ref}
    :inst.arg/arg2 #{:one :ref}
+   :inst.arg/arg3 #{:one :ref}
+   :inst.arg/arg4 #{:one :ref}
+   :inst.arg/arg5 #{:one :ref}
+   :inst.arg/arg6 #{:one :ref}
+   :inst.arg/arg7 #{:one :ref}
+   :inst.arg/arg8 #{:one :ref}
+   :inst.arg/arg9 #{:one :ref}
+   :inst.arg/arg10 #{:one :ref}
+   :inst.arg/arg11 #{:one :ref}
    })
 
 
 (def idx->arg
   [:inst.arg/arg0
    :inst.arg/arg1
-   :inst.arg/arg2])
+   :inst.arg/arg2
+   :inst.arg/arg3
+   :inst.arg/arg4
+   :inst.arg/arg5
+   :inst.arg/arg6
+   :inst.arg/arg7
+   :inst.arg/arg8
+   :inst.arg/arg9
+   :inst.arg/arg10
+   :inst.arg/arg11])
 
 (def bin-ops
   #{:inst.binop/+})
@@ -493,7 +512,7 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
                   (if (:node/return-type mp)
                     mp
                     (assoc mp :node/return-type no-type-id)))
-                       key)
+                key)
        _ (if prev-instruction-id
            (update-entity prev-instruction-id :inst/next inst-id)
            (no-op))
