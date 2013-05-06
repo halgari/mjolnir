@@ -32,6 +32,10 @@
   (infer-binop ?id ?val)
   [(identity :inst.binop/sub-type) ?attr])
 
+#_(defrule infer-node [?id ?attr ?val]
+  "infer cmp"
+  (infer-cmp-node ?id ?attr ?val))
+
 
 (defrule infer-cast [?id ?attr ?val]
   "infer casts"
@@ -167,7 +171,7 @@
   [(mjolnir.ssa-rules/binop-int-translation ?binop) ?op])
 
 (defrule binop-subtype [?type ?arg0-t ?arg1-t ?op]
-  "Int + resolves to :iadd"
+  "Float + resolves to :iadd"
   [?arg0-t :node/type :type/float]
   [?arg1-t :node/type :type/float]
   [?type :inst.binop/type ?binop]
@@ -232,7 +236,7 @@
    [:type/float :type/float :inst.cmp.pred/<=] :inst.cmp.sub-pred/real-ole
    [:type/float :type/float :inst.cmp.pred/>=] :inst.cmp.sub-pred/real-oge})
 
-(defrule infer-node [?id ?attr ?val]
+#_(defrule infer-cmp-node [?id ?attr ?val]
   "Infer cmp predicate"
   [?id :inst/type :inst.type/cmp]
   [(println "foo" ?id) ?v]

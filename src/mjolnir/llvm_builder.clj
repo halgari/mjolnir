@@ -343,6 +343,22 @@
                [test then else]
                (llvm/BuildCondBr builder test then else)))
 
+
+(def cmp-map
+  {[:type/int :type/int :inst.cmp.pred/=] :inst.cmp.sub-pred/int-eq
+   [:type/int :type/int :inst.cmp.pred/not=] :inst.cmp.sub-pred/int-ne
+   [:type/int :type/int :inst.cmp.pred/>] :inst.cmp.sub-pred/int-sgt
+   [:type/int :type/int :inst.cmp.pred/<] :inst.cmp.sub-pred/int-slt
+   [:type/int :type/int :inst.cmp.pred/<=] :inst.cmp.sub-pred/int-sle
+   [:type/int :type/int :inst.cmp.pred/>=] :inst.cmp.sub-pred/int-sge
+
+   [:type/float :type/float :inst.cmp.pred/=] :inst.cmp.sub-pred/real-oeq
+   [:type/float :type/float :inst.cmp.pred/not=] :inst.cmp.sub-pred/real-one
+   [:type/float :type/float :inst.cmp.pred/>] :inst.cmp.sub-pred/real-ogt
+   [:type/float :type/float :inst.cmp.pred/<] :inst.cmp.sub-pred/real-olt
+   [:type/float :type/float :inst.cmp.pred/<=] :inst.cmp.sub-pred/real-ole
+   [:type/float :type/float :inst.cmp.pred/>=] :inst.cmp.sub-pred/real-oge})
+
 (def cmp-table
   {:inst.cmp.sub-pred/int-eq llvm/LLVMIntEQ
    :inst.cmp.sub-pred/int-ne llvm/LLVMIntNE
@@ -360,6 +376,7 @@
    :inst.cmp.sub-pred/real-ogt llvm/LLVMRealOGT
    :inst.cmp.sub-pred/real-oge llvm/LLVMRealOGE
    :inst.cmp.sub-pred/real-ole llvm/LLVMRealOLE
+   :inst.cmp.sub-pred/real-olt llvm/LLVMRealOLT
    :inst.cmp.sub-pred/real-one llvm/LLVMRealONE
    :inst.cmp.sub-pred/real-ord llvm/LLVMRealORD
    :inst.cmp.sub-pred/real-uno llvm/LLVMRealUNO
@@ -375,18 +392,26 @@
   [d module builder fn inst defs]
   (unpack-args defs inst
                [lh rh]
-               (let [sub-type (cmp-table (:inst.cmp/sub-pred inst))]
-                 (assert sub-type (pr-str "Invalid cmp type" [(:inst.cmp/sub-pred inst)
-                                                              (:inst.cmp/pred inst)
-                                                              (-> inst
-                                                                  :inst.arg/arg0
-                                                                  :node/return-type
-                                                                  :node/type)
-                                                              (-> inst
-                                                                  :inst.arg/arg1
-                                                                  :node/return-type
-                                                                  :node/type)]))
-                 (llvm/BuildICmp builder sub-type lh rh (str "cmp_" (:db/id inst))))))
+               (let [lh-t (-> inst :inst.arg/arg0 :node/return-type :node/type)
+                     rh-t (-> inst :inst.arg/arg1 :node/return-type :node/type)
+                     pred (-> inst :inst.cmp/pred)
+                     sub-type (-> (cmp-map [lh-t rh-t pred])
+                                  cmp-table)]
+                 (assert (integer? sub-type) (pr-str "Invalid cmp type" [sub-type
+                                                              lh-t
+                                                              rh-t
+                                                              pred
+                                                              (cmp-map [lh-t rh-t pred])
+                                                              (-> (cmp-map [lh-t rh-t pred])
+                                                                  cmp-table)]))
+                 (cond
+                  (= lh-t rh-t :type/int)
+                  (llvm/BuildICmp builder sub-type lh rh (str "cmp_" (:db/id inst)))
+
+                  (= lh-t rh-t :type/float)
+                  (llvm/BuildFCmp builder sub-type lh rh (str "cmp_" (:db/id inst)))
+
+                  :else (assert false "No LLVM predicate builder")))))
 
 (defmethod build-instruction :inst.type/return-val
   [d module builder fn inst defs]

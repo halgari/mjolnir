@@ -7,7 +7,7 @@
                  [org.clojure/core.logic "0.8.3"]
                  [net.java.dev.jna/jna "3.4.0"]
                  [criterium "0.3.1"]
-		 #_[jcuda/jcuda "0.5.0"]]
+		 [jcuda/jcuda "0.5.0"]]
   :test-paths ["test/"]
   :java-source-paths ["src/examples"]
   :jvm-opts ["-Djava.library.path=/usr/lib"
