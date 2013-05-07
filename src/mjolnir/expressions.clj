@@ -264,23 +264,6 @@
      phi-val)))
 
 (defrecord Call [fnc args]
-  Validatable
-  (validate [this]
-    (valid? fnc)
-    (assure (FunctionType? (return-type fnc)))
-    (doseq [arg args]
-      (assure (Expression? arg)))
-    (let [cnt (count (:arg-types (return-type fnc)))]
-      (assure (= (count args) cnt))))
-  Expression
-  (return-type [this]
-    (:ret-type (return-type fnc)))
-  (build [this]
-    (llvm/BuildCall *builder*
-                    (build fnc)
-                    (llvm/map-parr build args)
-                    (count args)
-                    (genname "call_")))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -315,56 +298,6 @@
                     (llvm/map-parr build args)
                     (count args)
                     (genname "call_"))))
-
-(defrecord IAdd [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a)
-                      (return-type b)))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildAdd *builder* (build a) (build b) (genname "iadd_"))))
-
-(defrecord FAdd [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a)
-                      (return-type b)))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildFAdd *builder* (build a) (build b) (genname "iadd_"))))
-
-(defrecord ISub [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a) (return-type b)))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildSub *builder* (build a) (build b) (genname "isub_"))))
-
-(defrecord FSub [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a) (return-type b)))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildFSub *builder* (build a) (build b) (genname "fsub_"))))
 
 (defrecord Local [nm]
   SSAWriter
@@ -627,24 +560,6 @@
                     (llvm-type type)
                     name
                     (target/default-address-space *target*))))
-
-(defrecord FPToSI [val tp]
-  Validatable
-  (validate [this])
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (llvm/BuildFPToSI *builder* (build val) (llvm-type tp) (genname "toui_"))))
-
-(defrecord SIToFP [val tp]
-  Validatable
-  (validate [this])
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (llvm/BuildSIToFP *builder* (build val) (llvm-type tp) (genname "toui_"))))
 
 (defn kw->Global [module kw]
   (assert module "No Module Given")
