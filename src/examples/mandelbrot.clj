@@ -6,8 +6,8 @@
             [mjolnir.config :as config]
             [mjolnir.targets.target :refer [emit-to-file as-dll]]
             [mjolnir.intrinsics :as intr]
-            [mjolnir.targets.nvptx-intrinsics :refer [TID_X NTID_X CTAID_X TID_Y NTID_Y CTAID_Y]]
-            [mjolnir.targets.nvptx :as nvptx]
+            #_[mjolnir.targets.nvptx-intrinsics :refer [TID_X NTID_X CTAID_X TID_Y NTID_Y CTAID_Y]]
+            #_[mjolnir.targets.nvptx :as nvptx]
             [mjolnir.core :refer [build-module]])
   (:alias c mjolnir.constructors)
   (:import [java.awt Color Image Dimension]
@@ -80,7 +80,7 @@
         (aset arr idx (/ (calc-iteration x y max width height) max)))))
   arr)
 
-(defnf ^:extern calc-mandelbrot-ptx [Float32* arr
+#_(defnf ^:extern calc-mandelbrot-ptx [Float32* arr
                                      Float32 width
                                      Float32 height
                                      Float32 max
@@ -119,7 +119,7 @@
     (display-image img WIDTH)))
 
 
-(defmethod run-command [:run :ptx]
+#_(defmethod run-command [:run :ptx]
   [_ _]
   (nvptx/init-target identity)
   (binding
@@ -169,7 +169,7 @@
       #_(println (distinct (memory-to-array buf SIZE)))
       (display-image (memory-to-array buf SIZE) WIDTH))))
 
-(defmethod run-command [:benchmark :ptx]
+#_(defmethod run-command [:benchmark :ptx]
   [_ _]
   (nvptx/init-target identity)
   (binding
@@ -196,7 +196,7 @@
 
 (defmethod run-command [:benchmark :mjolnir]
   [_ _]
-  (binding [config/*target* (nvptx/make-default-target)
+  (binding [config/*target* (config/default-target)
             config/*float-type* Float32
             config/*int-type* Int64]
     (let [module (c/module ['examples.mandelbrot/square

@@ -92,8 +92,8 @@
   (assert (= arrow '->) "missing '-> before type")
   `(exp/->Const ~tp ~val))
 
-(defn c-or [a b]
-  (exp/->Or a b))
+(defn c-or [& exprs]
+  (gen-binops :or exprs))
 
 (defn c-= [a b]
   (exp/->Cmp := a b))
@@ -292,7 +292,6 @@
               sym)
         s (symbol (str "c-" (name sym)))
         var ((ns-publics (the-ns 'mjolnir.constructors-init)) s)]
-    (println s)
     var))
 
 (defn- constructor? [sym]
@@ -316,9 +315,12 @@
 
    (and (symbol? x)
         (constructor? x))
-   (symbol "mjolnir.constructors-init" (str "c-" (if (= (name x) "/")
-                                                   "div"
-                                                   (symbol x))))
+   (let [s
+         (symbol "mjolnir.constructors-init" (str "c-" (if (= (name x) "/")
+                                                         "div"
+                                                         (symbol x))))]
+     (println "ref: " s)
+     s)
    
    
    :else

@@ -33,17 +33,12 @@
 
 (defn infer-all [conn]
   (let [db-val (db conn)
-        nodes (->> (time (get-inferences (db conn)))
+        nodes (->> (get-inferences (db conn))
                    (remove (fn [[id attr val]]
                              (= val (attr (d/entity db-val id))))))
         data (map (fn [[id attr val]]
                     [:db/add id attr val])
                   nodes)]
-    (doseq [s (map (fn [[?nd ?attr ?type]]
-                     [(:inst/type (d/touch (d/entity (db conn) ?nd))) :->
-                      ?attr :->
-                      ?type])
-                   nodes)])
     (println "infered" (count nodes) "nodes")
     (d/transact conn data)
     (let [remaining (q '[:find ?id

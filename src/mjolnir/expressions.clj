@@ -22,42 +22,13 @@
   (write-ssa [this]))
 
 
-(defrecord ConstInteger [value type]
-  Validatable
-  (validate [this]
-    (assure (integer? value))
-    (assure (type? type)))
-  Expression
-  (return-type [this]
-    type)
-  (build [this]
-    (llvm/ConstInt (llvm-type type) value true)))
-
-(defrecord ConstVector [vals]
-  Validatable
-  (validate [this]
-    )
-  Expression
-  (return-type [this]
-    (->VectorType (return-type (first vals)) (count vals)))
-  (build [this]
-    (llvm/ConstVector (into-array Pointer
-                                  (map build vals))
-                      (count vals))))
 
 (defn- const-data [val]
   (cond
-   (integer? val) {:const/int-value val}))
+   (integer? val) {:const/int-value val}
+   (float? val) {:const/float-value val}))
 
 (defrecord Const [type val]
-  Validatable
-  (validate [this]
-    (assure (type? type)))
-  Expression
-  (return-type [this]
-    type)
-  (build [this]
-    (encode-const type val))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -80,108 +51,6 @@
                                :inst.arg/arg0 expr-id
                                :node/return-type tp-id})]
      casted)))
-
-(defrecord Trunc [a tp]
-  Validatable
-  (validate [this]
-    (assure (Expression? a))
-    (assure (type? tp)))
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (llvm/BuildTrunc *builder* (build a) (llvm-type tp) (genname "trunk_"))))
-
-(defrecord ZExt [a tp]
-  Validatable
-  (validate [this]
-    (assure (Expression? a))
-    (assure (type? tp)))
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (llvm/BuildZExt *builder* (build a) (llvm-type tp) (genname "zext_"))))
-
-(defrecord Add [a b]
-  Validatable
-  (validate [this]
-    (validate-all a b)
-    (assure-same-type a b))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildAdd *builder* (build a) (build b) (genname "add_"))))
-
-
-(defrecord IMul [a b]
-  Validatable
-  (validate [this]
-    (validate-all a b)
-    (assure-same-type a b))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildMul *builder* (build a) (build b) (genname "imul_"))))
-
-(defrecord FMul [a b]
-  Validatable
-  (validate [this]
-    (validate-all a b)
-    (assure-same-type a b))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildFMul *builder* (build a) (build b) (genname "fmul_"))))
-
-(defrecord FDiv [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a)
-                      (return-type b)))
-  Expression
-  (return-type [this]
-    (return-type a))
-  (build [this]
-    (llvm/BuildFDiv *builder* (build a) (build b) (genname "fdiv_"))))
-
-
-(defrecord And [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (assure-same-type (return-type a) Int1)
-    (assure-same-type (return-type b) Int1))
-  Expression
-  (return-type [this]
-    Int1)
-  (build [this]
-    (llvm/BuildAnd *builder*
-                   (build a)
-                   (build b)
-                   (genname "and_"))))
-
-(defrecord Or [a b]
-  Validatable
-  (validate [this]
-    (valid? a)
-    (valid? b)
-    (Expression? a)
-    (Expression? b))
-  Expression
-  (return-type [this]
-    Int1)
-  (build [this]
-    (llvm/BuildOr *builder*
-                  (build a)
-                  (build b)
-                  (genname "or_"))))
 
 (def cmp-maps
   {:int {:= llvm/LLVMIntEQ
@@ -239,33 +108,6 @@
                                {:inst.arg/idx idx}
                                this)]
      this-id)))
-
-#_(defrecord Argument [idx tp]
-  Validatable
-  (validate [this]
-    (assure (argument *fn* idx)))
-  Expression
-  (return-type [this]
-    tp)
-  (build [this]
-    (build (argument *fn* idx)))
-  SSAWriter
-  (write-ssa [this]
-    (gen-plan
-     [this-id (add-instruction :inst.type/argument
-                               {:argument/idx idx})]
-     this-id)))
-
-(defrecord FnArgument [arg-name arg-idx arg-type]
-    Validatable
-    (validate [this]
-      (assure (string? arg-name))
-      (assure (type? arg-type))
-      (assure (integer? arg-idx)))
-    Expression    (return-type [this]
-      arg-type)
-    (build [this]
-      (llvm/GetParam *llvm-fn* arg-idx)))
 
 (defn full-name [n]
   (cond (string? n) n
@@ -341,58 +183,6 @@
   (extends? GlobalExpression (type exp)))
 
 (defrecord Fn [name type arg-names body]
-  IFunctionExpression
-  (argument [this idx]
-    (FnArgument. (nth arg-names idx)
-                 idx
-                 (nth (:arg-types type) idx)))
-  Validatable
-  (validate [this]
-    (binding [*fn* this]
-      (assure (string? name))
-      (assure-type type)
-      (assure (FunctionType? type))
-      (assure (every? string? arg-names))
-      (when body
-        (assure (Expression? body))
-        (valid? body)
-        (when (not= (:ret-type type) VoidT)
-          (assure-same-type (return-type body) (:ret-type type))))
-      (assure (= (count (:arg-types type)) (count arg-names)))
-      
-      
-      (when-let [linkage (:linkage this)]
-        (assert (llvm/kw->linkage linkage) (str "No Linkage " linkage)))))
-  Expression
-  (return-type [this]
-    type)
-  (build [this]
-    (when body
-      (let [fnc (llvm/GetNamedFunction *module* name)
-            newargs (into {} (map (fn [s idx]
-                                    [s (llvm/GetParam fnc idx )])
-                                  arg-names
-                                  (range (count arg-names))))]
-        (binding [*fn* this
-                  *llvm-fn* fnc
-                  *llvm-locals* newargs]
-          (reset! *block* (llvm/AppendBasicBlock fnc (genname "fblk_")))
-          (llvm/PositionBuilderAtEnd *builder* @*block*)
-          (if (= (:ret-type type) VoidT)
-            (do
-              (build body)
-              (llvm/BuildRetVoid *builder*))
-            (llvm/BuildRet *builder* (build body) (genname "return_")))
-          fnc))))
-  GlobalExpression
-  (stub-global [this]
-    (let [tp (llvm-type type)
-          gbl (llvm/AddFunction *module* name tp)]
-      (llvm/SetFunctionCallConv gbl (target/get-calling-conv *target*
-                                                             (= :extern
-                                                                (:linkage this))))
-      (llvm/SetLinkage gbl (llvm/kw->linkage :extern))
-      gbl))
   IToPlan
   (add-to-plan [this]
     (gen-plan
@@ -428,50 +218,6 @@
      ids)))
 
 (defrecord If [test then else]
-  Validatable
-  (validate [this]
-    (valid? test)
-    (valid? then)
-    (valid? else)
-    (assure-same-type (return-type then) (return-type else))
-    (assure-same-type (return-type test) Int1))
-  Expression
-  (return-type [this]
-    (return-type then))
-  (build [this]
-    (let [thenblk (llvm/AppendBasicBlock *llvm-fn* (genname "then_"))
-          elseblk (llvm/AppendBasicBlock *llvm-fn* (genname "else_"))
-          endblk (llvm/AppendBasicBlock *llvm-fn* (genname "end_"))
-          cmpval (build test)
-          _ (llvm/BuildCondBr *builder* cmpval thenblk elseblk)
-          _ (llvm/PositionBuilderAtEnd *builder* thenblk)
-          _ (reset! *block* thenblk)
-          thenval (build then)
-          post-thenblk @*block*
-          _ (when-not (= thenval :terminated)
-              (llvm/BuildBr *builder* endblk))
-          _ (llvm/PositionBuilderAtEnd *builder* elseblk)
-          _ (reset! *block* elseblk)
-          elseval (build else)
-          post-elseblk @*block*
-          _ (when-not (= elseval :terminated)
-              (llvm/BuildBr *builder* endblk))
-          _ (llvm/PositionBuilderAtEnd *builder* endblk)
-          _ (reset! *block* endblk)
-          phi (llvm/BuildPhi *builder*
-                             (llvm-type (return-type this))
-                             (genname "iflanding_"))]
-      (when-not (= thenval :terminated)
-        (llvm/AddIncoming phi
-                          (into-array Pointer [thenval])
-                          (into-array Pointer [post-thenblk])
-                          1))
-      (when-not (= elseval :terminated)
-        (llvm/AddIncoming phi
-                          (into-array Pointer [elseval])
-                          (into-array Pointer [post-elseblk])
-                          1))      
-      phi))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -622,18 +368,6 @@
     (llvm/BuildFSub *builder* (build a) (build b) (genname "fsub_"))))
 
 (defrecord Local [nm]
-  Validatable
-  (validate [this]
-    (assure (string? nm))
-    (assert (*locals* nm) (str "Couldn't find " nm " in locals: " *locals*))
-    (assure (type? (*locals* nm))))
-  Expression
-  (return-type [this]
-    (*locals* nm))
-  (build [this]
-    (let [a (*llvm-locals* nm)]
-      (assert a (str "Can't find local " nm))
-      a))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -642,66 +376,6 @@
      (let [a (locals nm)]
        (assert a (str "Can't find local " nm " in " locals))
        a))))
-
-
-(defrecord +Op [exprs]
-  Validatable
-  (validate [this]
-    (doseq [exp exprs]
-      (assure (valid? exp)))
-    (assert (apply = (map return-type exprs))
-            "Every Expression in a + must return the same type"))
-  Expression
-  (return-type [this]
-    (return-type (first exprs)))
-  (build [this]
-    (-> (reduce (fn [a x]
-                  (cond
-                    (integer-type? (return-type a)) (->IAdd a x)
-                    (float-type? (return-type a)) (->FAdd a x)
-                    (vector-type? (return-type a)) (->FAdd a x)))
-                (first exprs)
-                (next exprs))
-        build)))
-
-(defrecord -Op [exprs]
-  Validatable
-  (validate [this]
-    (doseq [exp exprs]
-      (assure (valid? exp)))
-    (assert (apply = (map return-type exprs))
-            "Every Expression in a - must return the same type"))
-  Expression
-  (return-type [this]
-    (return-type (first exprs)))
-  (build [this]
-    (-> (reduce (fn [a x]
-                  (cond
-                    (integer-type? (return-type a)) (->ISub a x)
-                    (float-type? (return-type a)) (->FSub a x)
-                    (vector-type? (return-type a)) (->FSub a x)))
-                (first exprs)
-                (next exprs))
-        build)))
-(defrecord *Op [exprs]
-  Validatable
-  (validate [this]
-    (doseq [exp exprs]
-      (assure (valid? exp)))
-    (assert (apply = (map return-type exprs))
-            "Every Expression in a * must return the same type"))
-  Expression
-  (return-type [this]
-    (return-type (first exprs)))
-  (build [this]
-    (-> (reduce (fn [a x]
-                  (cond
-                    (integer-type? (return-type a)) (->IMul a x)
-                    (float-type? (return-type a)) (->FMul a x)
-                    (vector-type? (return-type a)) (->FMul a x)))
-                (first exprs)
-                (next exprs))
-        build)))
 
 
 (defrecord Loop [itms body]
@@ -736,24 +410,6 @@
      return-val)))
 
 (defrecord Let [nm bind body]
-  Validatable
-  (validate [this]
-    (valid? bind)
-    (assure (string? nm))
-    (binding [*locals* (assoc *locals*
-                         nm (return-type bind))]
-      (valid? body)))
-  Expression
-  (return-type [this]
-    (binding [*locals* (assoc *locals*
-                         nm (return-type bind))]
-      (return-type body)))
-  (build [this]
-    (binding [*locals* (assoc *locals*
-                         nm (return-type bind))
-              *llvm-locals* (assoc *llvm-locals*
-                              nm (build bind))]
-      (build body)))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -785,35 +441,6 @@
      inst-id)))
 
 (defrecord ASet [arr idx val]
-  Validatable
-  (validate [this]
-    (assure (vector? idx))
-    (doseq [i idx]
-      (assure (valid? i)))
-    (assure (valid? arr))
-    (assure (valid? val))
-    (assure (ElementPointer? (return-type arr))))
-  Expression
-  (return-type [this]
-    (return-type arr))
-  (build [this]
-    (let [a (build arr)
-          casted (llvm/BuildBitCast *builder*
-                                    a
-                                    (-> this
-                                        return-type
-                                        etype
-                                        ->PointerType
-                                        llvm-type)
-                                    (genname "casted_"))
-          gep (llvm/BuildGEP *builder*
-                            casted
-                            (into-array Pointer
-                                        (map build idx))
-                            (count idx)
-                            (genname "gep_"))]
-      (llvm/BuildStore *builder* (build val) gep)
-      a))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -827,33 +454,6 @@
      inst-id)))
 
 (defrecord AGet [arr idx]
-  Validatable
-  (validate [this]
-    (assure (valid? arr))
-    (assure (vector? idx))
-    (doseq [i idx]
-      (assure (valid? i)))
-    (assure (ElementPointer? (return-type arr))))
-  Expression
-  (return-type [this]
-    (etype (return-type arr)))
-  (build [this]
-    (let [casted (llvm/BuildBitCast *builder*
-                                    (build arr)
-                                    (-> this
-                                        return-type
-                                        ->PointerType
-                                        llvm-type)
-                                    (genname "casted_"))
-          gep (llvm/BuildGEP *builder*
-                             casted
-                            (into-array Pointer
-                                        (map build idx))
-                            (count idx)
-                            (genname "gep_"))]
-      (llvm/BuildLoad *builder*
-                      gep
-                      (genname "load_"))))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -1000,18 +600,6 @@
      nil)))
 
 (defrecord Do [body]
-  Validatable
-  (validate [this]
-    (doseq [exp body]
-      (assure (Expression? exp))
-      (assure (valid? exp))))
-  Expression
-  (return-type [this]
-    (return-type (last body)))
-  (build [this]
-    (doseq [exp (butlast body)]
-      (build exp))
-    (build (last body)))
   SSAWriter
   (write-ssa [this]
     (gen-plan
@@ -1082,29 +670,11 @@
 
 
 (extend-type java.lang.Long
-  Validatable
-  (validate [this]
-    true)
-  Expression
-  (return-type [this]
-    (assert *int-type* "No type set for ints")
-    *int-type*)
-  (build [this]
-    (encode-const *int-type* this))
   SSAWriter
   (write-ssa [this]
     (write-ssa (->Const *int-type* this))))
 
 (extend-type java.lang.Double
-  Validatable
-  (validate [this]
-    true)
-  Expression
-  (return-type [this]
-    (assert *float-type* "No type set for floats")
-    *float-type*)
-  (build [this]
-    (encode-const *float-type* this))
   SSAWriter
   (write-ssa [this]
     (write-ssa (->Const *float-type* this))))

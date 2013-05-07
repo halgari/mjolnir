@@ -27,6 +27,7 @@
    :ref [:db/valueType :db.type/ref]
    :keyword [:db/valueType :db.type/keyword]
    :int [:db/valueType :db.type/long]
+   :float [:db/valueType :db.type/double]
    :boolean [:db/valueType :db.type/boolean]
    :string [:db/valueType :db.type/string]
    :unique [:db/unique :db.unique/value]})
@@ -61,6 +62,7 @@
    :block/terminator-inst #{:one :ref}
    
    :const/int-value #{:one :int}
+   :const/float-value #{:one :float}
    :const/type #{:one :ref}
    
    :argument/name #{:one :string}
@@ -128,53 +130,10 @@
    :inst.arg/arg10
    :inst.arg/arg11])
 
-(def bin-ops
-  #{:inst.binop/+})
-
 (defn error-messages []
   {:error.fn/return-type-match "Return instructions must return the same type as their eclosing function"})
 
 ;; rules
-
-(defmacro defrule [name args & body])
-
-(defrule global-def [?id]
-  [?id :node/type :node.type/fn])
-
-
-
-(def global-defs
-  '[[(global-def ?id)
-     [?id :node/type :node.type/fn]]
-    [(global-def ?id)
-     [?id :node/type :node.type/fn]]])
-
-(def error-message-rules
-  '[[(error-message ?id ?err)
-     [?x :error/key ?id]
-     [?x :error/value ?err]]])
-
-(def return-type-rules
-  '[[(return-type ?id ?type)
-     [?id :inst/type :inst.type/const]
-     [?id :const/type ?type]]])
-
-(def validation-error-rules
-  (concat
-   #_error-message-rules
-   return-type-rules
-   '[[(validation-error ?id ?ref ?err)
-      [?id :node/type :node.type/fn]
-      [?id :fn/type ?fn-type]
-      [?fn-type :type.fn/return ?ret-type]
-      [?block :block/fn ?id]
-      [?ref :inst/block ?block]
-      (return-type ?ref ?type)
-      [(not= ?type ?ret-type)]
-      [["Return instruction types must match function return type"] [?err]]]]))
-
-(def ssa-rules
-  (concat global-defs))
 
 (defn assert-schema [conn desc]
   (->> (for [[id attrs] desc]
@@ -530,15 +489,6 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
        last
        (iterate :inst/next)
        (take-while (complement nil?))))
-
-
-(defn validation-errors [db]
-  (q '[:find ?id ?ref ?err
-       :in $ %
-       :where
-       (validation-error ?id ?ref ?err)]
-     db
-     validation-error-rules))
 
 
 (defn new-db []

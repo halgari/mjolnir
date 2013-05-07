@@ -4,7 +4,7 @@
    [mjolnir.validation :refer [validate]]
    [clojure.test :refer :all]
    [datomic.api :refer [q db] :as d]
-   [mjolnir.config :refer [*int-type* *target* default-target]]
+   [mjolnir.config :refer [*int-type* *target* default-target *float-type*]]
    [mjolnir.ssa :refer :all]
    [mjolnir.llvm-builder :refer :all]
    [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
@@ -156,21 +156,93 @@
       (infer-all conn)
       (validate (db conn))
       (let [x (build (db conn))]
-        (dump x)
         (verify x)
         x))))
 
 
-    (defnf defnf-fib [Int64 x -> Int64]
-      (if (< x 2)
-        x
-        (+ (defnf-fib (dec x))
-           (defnf-fib (- x 2)))))
+(defnf defnf-fib [Float64 x -> Float64]
+  (if (< x 2.0)
+    x
+    (+ (defnf-fib (- x 1.0))
+       (defnf-fib (- x 2.0)))))
 
-(deftest compile-constructor
+(deftest compile-constructors
   (binding [*int-type* Int64
+            *float-type* Float64
             *target* (default-target)]
     (-> (c/module ['mjolnir.simple-tests/defnf-fib])
+        to-db
+        to-llvm-module)))
+
+
+
+(defnf for-test [Float32 max -> Float32]
+  (for [x [0.0 max 1.0]]
+    1.0)
+  1.0)
+
+(deftest for-tests
+  (binding [*float-type* Float32
+            *target* (default-target)]
+    (-> (c/module ['mjolnir.simple-tests/for-test])
+        to-db
+        to-llvm-module)))
+
+
+
+(c/defn for-max [Float32 xpx Float32 ypx Float32 max Float32 width Float32 height -> Float32]
+  (c/for [x [0.0 max 1.0]]
+    1.0)
+  1.0)
+
+(deftest for-max
+  (binding [*float-type* Float32
+            *target* (default-target)]
+    (-> (c/module ['mjolnir.simple-tests/for-max])
+        to-db
+        to-llvm-module)))
+
+
+;; Float math test - mandelbrot
+
+(defnf square [Float32 x -> Float32]
+  (* x x))
+
+
+
+(defnf calc-iteration [Float32 xpx Float32 ypx Float32 max Float32 width Float32 height -> Float32]
+  (let [x0 (- (* (/ xpx width) 3.5) 2.5)
+        y0 (- (/ (/ ypx height) 2.0) 1.0)]
+    (loop [iteration 0.0
+           x 0.0
+           y 0.0]
+      (if (and (< (+ (square x)
+                     (square y))
+                  (square 2.0))
+               (< iteration max))
+        (recur (+ iteration 1.0)
+               (+ (- (square x)
+                     (square y))
+                  x0)
+               (+ (* 2.0 x y)
+                  y0))
+        iteration))))
+
+(defnf ^:extern calc-mandelbrot [Float32* arr Float32 width Float32 height Float32 max -> Float32*]
+  (for [y [0.0 height 1.0]]
+    (for [x [0.0 width 1.0]]
+      (let [idx (cast Int64 (+ (* y width) x))]
+        (aset arr idx (/ (calc-iteration x y max width height) max)))))
+  arr)
+
+
+#_(deftest compile-mandelbrot
+  (binding [*int-type* Int64
+            *float-type* Float32
+            *target* (default-target)]
+    (-> (c/module ['mjolnir.simple-tests/square
+                   'mjolnir.simple-tests/calc-iteration
+                   'mjolnir.simple-tests/calc-mandelbrot])
         to-db
         to-llvm-module)))
 

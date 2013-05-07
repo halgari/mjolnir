@@ -1,5 +1,6 @@
 (ns mjolnir.llvm-builder
   (:require [mjolnir.ssa :refer :all]
+            [mjolnir.ssa-rules :refer [rules]]
             [datomic.api :refer [db q] :as d]
             [mjolnir.llvmc :as llvm]
             [mjolnir.targets.target :as target]
@@ -57,8 +58,8 @@
 ;; Converts a type entity to a llvm type
 (defmulti build-type :node/type)
 
-(defmulti build-instruction (fn [d module builder fn itm defs]
-                              (:inst/type itm)))
+(defmulti build-instruction (fn [d module builder fn inst defs]
+                              (:inst/type inst)))
 
 (defmulti build-terminator (fn [module builder fn inst defs]
                              (:inst/type inst)))
@@ -70,16 +71,13 @@
 
 
 ;; Using the type entity (tp) encodes vall as that type
-(defmulti encode-const (fn [tp val] (:node/type tp)))
+(defmulti encode-const (fn [tp val]
+                         (:node/type tp)))
 
 
 (defmethod build-type :type/int
   [x]
   (llvm/IntType (:type/width x)))
-
-(defmethod build-type :type/float
-  [x]
-  (llvm/FloatType (:type/width x)))
 
 (defmethod encode-const :type/int
   [tp val]
@@ -122,10 +120,11 @@
 (defmethod build-type :type/fn
   [{return-type :type.fn/return
     arg-types :type.fn/arguments}]
-  (llvm/FunctionType (build-type return-type)
-                     (llvm/map-parr build-type (to-seq arg-types))
-                     (count arg-types)
-                     false))
+  (let [arg-types (to-seq arg-types)]
+    (llvm/FunctionType (build-type return-type)
+                       (llvm/map-parr build-type arg-types)
+                       (count arg-types)
+                       false)))
 
 
 (defn new-module []
@@ -149,7 +148,17 @@
 
 (def arg-kws
   [:inst.arg/arg0
-   :inst.arg/arg1])
+   :inst.arg/arg1
+   :inst.arg/arg2
+   :inst.arg/arg3
+   :inst.arg/arg4
+   :inst.arg/arg5
+   :inst.arg/arg6
+   :inst.arg/arg7
+   :inst.arg/arg8
+   :inst.arg/arg9
+   :inst.arg/arg10
+   :inst.arg/arg11])
 
 
 (defn args-seq [ent]
@@ -296,12 +305,14 @@
 (defmethod build-instruction :inst.type/const
   [d module builder fn itm defs]
   (assoc defs itm (encode-const (:const/type itm)
-                                (or (:const/int-value itm)))))
+                                (or (:const/int-value itm)
+                                    (:const/float-value itm)))))
 
 (defmethod build-instruction :inst.type/arg
-  [d module builder fn itm defs]
-  (assoc defs itm
-         (llvm/GetParam fn (:inst.arg/idx itm))))
+  [d module builder fn inst defs]
+  (println "fooo" (:inst.arg/idx inst))
+  (assoc defs inst
+         (llvm/GetParam fn (:inst.arg/idx inst))))
 
 (defn- gen-op-name [instr]
   (name (gensym (str (name (:inst.binop/type instr)) "_"))))
@@ -392,6 +403,8 @@
   [d module builder fn inst defs]
   (unpack-args defs inst
                [lh rh]
+               (assert (= (-> inst :inst.arg/arg0 :node/return-type)
+                          (-> inst :inst.arg/arg1 :node/return-type)))
                (let [lh-t (-> inst :inst.arg/arg0 :node/return-type :node/type)
                      rh-t (-> inst :inst.arg/arg1 :node/return-type :node/type)
                      pred (-> inst :inst.cmp/pred)
@@ -406,10 +419,10 @@
                                                                   cmp-table)]))
                  (cond
                   (= lh-t rh-t :type/int)
-                  (llvm/BuildICmp builder sub-type lh rh (str "cmp_" (:db/id inst)))
+                  (llvm/BuildICmp builder sub-type lh rh (str "icmp_" (:db/id inst)))
 
                   (= lh-t rh-t :type/float)
-                  (llvm/BuildFCmp builder sub-type lh rh (str "cmp_" (:db/id inst)))
+                  (llvm/BuildFCmp builder sub-type lh rh (str "fcmp_" (:db/id inst)))
 
                   :else (assert false "No LLVM predicate builder")))))
 
@@ -527,7 +540,7 @@
                           :where
                           (global-def ?id ?name ?type)]
                         db
-                        ssa-rules)
+                        @rules)
                      (map (comp (partial d/entity db) first)))
         module (new-module)
         builder (llvm/CreateBuilder)]
