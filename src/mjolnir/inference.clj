@@ -20,7 +20,23 @@
                      db
                      @rules
                      notype)
-                  #_ki(->> (q '[:find ?id ?val
+                  #_(q '[:find ?id ?attr ?val
+                       :in $ % ?notype
+                       :where
+                       #_[?id :node/return-type ?notype]
+                       (infer-cast-node ?id ?attr ?val)]
+                     db
+                     @rules
+                     notype)
+                  #_(q '[:find ?id ?attr ?val
+                       :in $ % ?notype
+                       :where
+                       #_[?id :node/return-type ?notype]
+                       (infer-binop-node ?id ?attr ?val)]
+                     db
+                     @rules
+                     notype)
+                  #_(->> (q '[:find ?id ?val
                             :in $ %
                             :where
                             [?id :node/return-type ?notype]
@@ -39,7 +55,6 @@
         data (map (fn [[id attr val]]
                     [:db/add id attr val])
                   nodes)]
-    (println "infered" (count nodes) "nodes")
     (d/transact conn data)
     (let [remaining (q '[:find ?id
                                      :where

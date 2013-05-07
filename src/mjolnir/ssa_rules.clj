@@ -27,7 +27,7 @@
   (return-type ?id ?val)
   [(identity :node/return-type) ?attr])
 
-(defrule infer-node [?id ?attr ?val]
+#_(defrule infer-binop-node [?id ?attr ?val]
   "infer binop subtypes"
   (infer-binop ?id ?val)
   [(identity :inst.binop/sub-type) ?attr])
@@ -37,14 +37,14 @@
   (infer-cmp-node ?id ?attr ?val))
 
 
-(defrule infer-cast [?id ?attr ?val]
+(defrule infer-node [?id ?attr ?val]
   "infer casts"
   [?id :inst/type :inst.type/cast]
   [?id :inst.arg/arg0 ?arg0]
   (return-type ?arg0 ?arg0-t)
-  [?id :node/return-type ?return-type]
+  [?id :node/return-type ?arg1-t]
   (cast-subtype ?id ?arg0-t ?arg1-t ?val)
-  [(identity :inst.cast/subtype) ?attr])
+  [(identity :inst.cast/type) ?attr])
 
 ;;
 
@@ -138,44 +138,30 @@
 ;; decide if a binop is a Float or Int operation. FMul is different
 ;; from IMul, so this code specializes that information. 
 
-(defrule infer-binop [?id ?op]
-  "A binop of two ints "
-  [?id :inst/type :inst.type/binop]
-  [?id :inst.arg/arg0 ?arg0]
-  [?id :inst.arg/arg1 ?arg1]
-  (return-type ?arg0 ?arg0-t)
-  (return-type ?arg1 ?arg1-t)
-  (binop-subtype ?id ?arg0-t ?arg1-t ?op))
+(comment
+  (defrule infer-binop [?id ?op]
+    "A binop of two ints "
+    [?id :inst/type :inst.type/binop]
+    [?id :inst.arg/arg0 ?arg0]
+    [?id :inst.arg/arg1 ?arg1]
+    (return-type ?arg0 ?arg0-t)
+    (return-type ?arg1 ?arg1-t)
+    (binop-subtype ?id ?arg0-t ?arg1-t ?op))
 
-(def binop-int-translation
-  {:inst.binop.type/add :inst.binop.subtype/iadd
-   :inst.binop.type/sub :inst.binop.subtype/isub
-   :inst.binop.type/mul :inst.binop.subtype/imul
-   :inst.binop.type/div :inst.binop.subtype/idiv
-   :inst.binop.type/rem :inst.binop.subtype/irem
-   :inst.binop.type/and :inst.binop.subtype/and
-   :inst.binop.type/or :inst.binop/subtype/or})
 
-(def binop-float-translation
-  {:inst.binop.type/add :inst.binop.subtype/fadd
-   :inst.binop.type/sub :inst.binop.subtype/fsub
-   :inst.binop.type/mul :inst.binop.subtype/fmul
-   :inst.binop.type/div :inst.binop.subtype/fdiv
-   :inst.binop.type/rem :inst.binop.subtype/frem})
+  (defrule binop-subtype [?type ?arg0-t ?arg1-t ?op]
+    "Int + resolves to :iadd"
+    [?arg0-t :node/type :type/int]
+    [?arg1-t :node/type :type/int]
+    [?type :inst.binop/type ?binop]
+    [(mjolnir.ssa-rules/binop-int-translation ?binop) ?op])
 
-(defrule binop-subtype [?type ?arg0-t ?arg1-t ?op]
-  "Int + resolves to :iadd"
-  [?arg0-t :node/type :type/int]
-  [?arg1-t :node/type :type/int]
-  [?type :inst.binop/type ?binop]
-  [(mjolnir.ssa-rules/binop-int-translation ?binop) ?op])
-
-(defrule binop-subtype [?type ?arg0-t ?arg1-t ?op]
-  "Float + resolves to :iadd"
-  [?arg0-t :node/type :type/float]
-  [?arg1-t :node/type :type/float]
-  [?type :inst.binop/type ?binop]
-  [(mjolnir.ssa-rules/binop-float-translation ?binop) ?op])
+  (defrule binop-subtype [?type ?arg0-t ?arg1-t ?op]
+    "Float + resolves to :iadd"
+    [?arg0-t :node/type :type/float]
+    [?arg1-t :node/type :type/float]
+    [?type :inst.binop/type ?binop]
+    [(mjolnir.ssa-rules/binop-float-translation ?binop) ?op]))
 
 
 ;; Cast subtype
@@ -197,6 +183,18 @@
   [?arg1-t :type/length ?arg1-length]
   [(< ?arg0-length ?arg1-length)]
   [(identity :inst.cast.type/zext) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Floats cast to int"
+  [?arg0-t :node/type :type/float]
+  [?arg1-t :node/type :type/int]
+  [(identity :inst.cast.type/fp-to-si) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Ints cast to floats"
+  [?arg0-t :node/type :type/int]
+  [?arg1-t :node/type :type/float]
+  [(identity :inst.cast.type/si-to-fp) ?op])
 
 (defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
   "Larger Ints truncate to smaller ints"

@@ -90,7 +90,7 @@
    :inst.binop/sub-type #{:one :keyword}
    :inst.arg/idx #{:one :int}
 
-   :inst.cast/type #{:one :ref}
+   :inst.cast/type #{:one :keyword}
 
    :inst.gbl/name #{:one :string}
    :inst.call/fn #{:one :ref}

@@ -47,8 +47,7 @@
      [tp-id (add-to-plan tp)
       expr-id (write-ssa expr)
       casted (add-instruction :inst.type/cast
-                              {:inst.cast/type tp-id
-                               :inst.arg/arg0 expr-id
+                              {:inst.arg/arg0 expr-id
                                :node/return-type tp-id})]
      casted)))
 

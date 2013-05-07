@@ -236,7 +236,7 @@
   arr)
 
 
-#_(deftest compile-mandelbrot
+(deftest compile-mandelbrot
   (binding [*int-type* Int64
             *float-type* Float32
             *target* (default-target)]

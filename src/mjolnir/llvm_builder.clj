@@ -126,7 +126,7 @@
                        (count arg-types)
                        false)))
 
-
+ 
 (defn new-module []
   (llvm/ModuleCreateWithName "Mjolnir Module"))
 
@@ -310,12 +310,27 @@
 
 (defmethod build-instruction :inst.type/arg
   [d module builder fn inst defs]
-  (println "fooo" (:inst.arg/idx inst))
   (assoc defs inst
          (llvm/GetParam fn (:inst.arg/idx inst))))
 
 (defn- gen-op-name [instr]
   (name (gensym (str (name (:inst.binop/type instr)) "_"))))
+
+(def binop-map
+  {:type/int
+   {:inst.binop.type/add :inst.binop.subtype/iadd
+    :inst.binop.type/sub :inst.binop.subtype/isub
+    :inst.binop.type/mul :inst.binop.subtype/imul
+    :inst.binop.type/div :inst.binop.subtype/idiv
+    :inst.binop.type/rem :inst.binop.subtype/irem
+    :inst.binop.type/and :inst.binop.subtype/and
+    :inst.binop.type/or :inst.binop/subtype/or}
+   :type/float
+   {:inst.binop.type/add :inst.binop.subtype/fadd
+    :inst.binop.type/sub :inst.binop.subtype/fsub
+    :inst.binop.type/mul :inst.binop.subtype/fmul
+    :inst.binop.type/div :inst.binop.subtype/fdiv
+    :inst.binop.type/rem :inst.binop.subtype/frem}})
 
 (def binop->llvm-binop
   {:inst.binop.subtype/iadd llvm/LLVMAdd
@@ -333,7 +348,12 @@
 
 (defmethod build-instruction :inst.type/binop
   [d module builder fn inst defs]
-  (let [llvm-op (binop->llvm-binop (:inst.binop/sub-type inst))]
+  (let [llvm-op (-> inst
+                    :node/return-type
+                    :node/type
+                    binop-map
+                    (get (:inst.binop/type inst))
+                    binop->llvm-binop)]
     (assert llvm-op (str "no binop map for:  "
                          (:inst.binop/sub-type inst)
                          " "
@@ -529,7 +549,7 @@
                                  :node/return-type
                                  build-type)
                      sub-type (cast-table (:inst.cast/type inst))]
-                 (assert sub-type (str "Unknown subtype for" inst))
+                 (assert sub-type (str "Unknown subtype for " (d/touch inst) (d/touch (:inst.cast/type inst)) to-type))
                  (llvm/BuildCast builder sub-type val to-type (str "cast_" (:db/id inst))))))
 
 
