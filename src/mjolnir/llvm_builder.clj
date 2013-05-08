@@ -107,11 +107,20 @@
                       0)))
 
 
+(defmethod build-type :type/struct
+  [x]
+  (let [members (->> (:type.member/_struct x)
+                     (sort-by :type.member/idx)
+                     (map :type.member/type))]
+    (llvm/StructType (llvm/map-parr build-type members)
+                     (count members)
+                     false)))
+
+
 
 (defmethod encode-const :type/float
   [tp val]
   (llvm/ConstReal (build-type tp) val))
-
 
 
 
@@ -552,7 +561,41 @@
                  (assert sub-type (str "Unknown subtype for " (d/touch inst) (d/touch (:inst.cast/type inst)) to-type))
                  (llvm/BuildCast builder sub-type val to-type (str "cast_" (:db/id inst))))))
 
+(defn pointer-to [x]
+  {:node/type :type/pointer
+   :type/element-type x})
 
+#_(defn cast-struct [ptr tp]
+  {:inst.type/cast
+   :node/return-type 
+   :inst.cast/type :inst.cast.type/bitcast
+   :inst.arg/arg0 ptr})
+
+(defmethod build-instruction :inst.type/set
+  [d module builder fnc inst defs]
+  (unpack-args defs inst
+               [ptr val]
+               (let [return-type (-> inst
+                                     :node/return-type)
+                     filtered (filter (fn [member]
+                                        (when (= (:type.member/name member)
+                                                 (:inst.set/member inst))
+                                          (:type.member/idx member)))
+                                      (-> return-type
+                                          :type.member/_struct))
+                     idx (first filtered)
+                     _ (assert idx (str "Member not found"
+                                        (:inst.set/member inst)
+                                        (vec (:type.member/_struct return-type))))
+                     _ (assert (= 1 (count filtered)) (str "Duplicate member name" (vec filtered)))
+                     casted (llvm/BuildCast builder
+                                            llvm/LLVMBitcast
+                                            ptr
+                                            (build-type (pointer-to return-type))
+                                            (str "casted_" (:db/id inst)))
+                     gep (llvm/BuildStructGEP builder casted idx (str "gep_" (:db/id inst)))]
+                 (llvm/BuildStore builder val gep)
+                 ptr)))
 
 (defn build [db]
   (let [globals (->> (q '[:find ?id

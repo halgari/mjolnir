@@ -81,6 +81,12 @@
    :type/element-type #{:one :ref}
    :type/length #{:one :int}
 
+   :type.member/idx #{:one :int}
+   :type.member/struct #{:one :ref}
+   :type.member/type #{:one :ref}
+   :type.struct/extends #{:one :ref}
+   :type.member/name #{:one :keyword}
+
    :type/unknown #{:one :keyword}
 
    :error/key #{:one :keyword}
@@ -92,6 +98,8 @@
 
    :inst.cast/type #{:one :keyword}
 
+   :inst.set/member #{:one :keyword}
+   
    :inst.gbl/name #{:one :string}
    :inst.call/fn #{:one :ref}
 

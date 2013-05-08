@@ -422,7 +422,17 @@
           cptr (build (->Cast (->PointerType etp) ptr))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "set_"))]
       (llvm/BuildStore *builder* (build val) gep)
-      bptr)))
+      bptr))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [ptr-id (write-ssa ptr)
+      val-id (write-ssa val)
+      inst-id (add-instruction :inst.type/set
+                               {:inst.arg/arg0 ptr-id
+                                :inst.arg/arg1 val-id
+                                :inst.set/member member})]
+     ptr-id)))
 
 
 (defrecord Store [ptr val]
@@ -438,13 +448,6 @@
 
 
 (defrecord Get [ptr member]
-  Validatable
-  (validate [this]
-    (assure (valid? ptr))
-    (assure (keyword? member))
-    (assure (pointer-type? (return-type ptr)))
-    (assure (member-idx (etype (return-type ptr))
-                        member)))
   Expression
   (return-type [this]
     (let [idx (member-idx (etype (return-type ptr))

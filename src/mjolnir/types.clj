@@ -228,11 +228,20 @@
      this-id)))
 
 
+(comment
+  (defn flatten-struct [tp]
+    (->> (take-while (complement nil?)
+                     (iterate :extends tp))
+         reverse
+         (mapcat :members))))
+
+
 (defn flatten-struct [tp]
   (->> (take-while (complement nil?)
                    (iterate :extends tp))
        reverse
        (mapcat :members)))
+
 
 (defn seq-idx [col ksel k]
   (-> (zipmap (map ksel col)
@@ -246,20 +255,31 @@
 
 
 (defrecord StructType [name extends members]
-  Validatable
-  (validate [this]
-    (when extends
-      (assure (instance? StructType extends)))
-    (doseq [[tp name] members]
-      (assure (keyword? name))
-      (assure (extends? Type (class tp)))))
-  Type
-  (llvm-type [this]
-    (let [mems (flatten-struct this)]
-      (llvm/StructType (llvm/map-parr (comp llvm-type first)
-                                      mems)
-                       (count mems)
-                       true))))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [extends-id (if extends
+                   (add-to-plan extends)
+                   (no-op))
+      member-ids (->> (flatten-struct this)
+                      (map first)
+                      (map add-to-plan)
+                      add-all)
+      struct-id (assert-entity (merge {:node/type :type/struct}
+                                      (when extends-id
+                                        {:type.struct/extends extends-id})))
+      members-idx (assert-all (map
+                               (fn [id name idx]
+                                 [{:node/type :type/member
+                                   :type.member/idx idx
+                                   :type.member/name name
+                                   :type.member/type id
+                                   :type.member/struct struct-id}
+                                  nil])
+                               member-ids
+                               (map second (flatten-struct this))
+                               (range)))]
+     struct-id)))
 
 (defn StructType? [tp]
   (instance? StructType tp))

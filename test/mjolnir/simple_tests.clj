@@ -208,8 +208,6 @@
 (defnf square [Float32 x -> Float32]
   (* x x))
 
-
-
 (defnf calc-iteration [Float32 xpx Float32 ypx Float32 max Float32 width Float32 height -> Float32]
   (let [x0 (- (* (/ xpx width) 3.5) 2.5)
         y0 (- (/ (/ ypx height) 2.0) 1.0)]
@@ -243,6 +241,22 @@
     (-> (c/module ['mjolnir.simple-tests/square
                    'mjolnir.simple-tests/calc-iteration
                    'mjolnir.simple-tests/calc-mandelbrot])
+        to-db
+        to-llvm-module)))
+
+(c/defstruct MyStruct
+  :members [Int64 x
+            Float64 y])
+
+(defnf struct-fn [MyStruct foo -> MyStruct]
+  (set foo :x 42)
+  foo)
+
+(deftest compile-struct
+  (binding [*int-type* Int64
+            *float-type* Float32
+            *target* (default-target)]
+    (-> (c/module ['mjolnir.simple-tests/struct-fn])
         to-db
         to-llvm-module)))
 

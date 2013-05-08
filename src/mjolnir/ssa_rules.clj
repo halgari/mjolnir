@@ -120,6 +120,12 @@
   (return-type ?arg0 ?arg0-t)
   [?arg0-t :type/element-type ?type])
 
+(defrule return-type [?id ?type]
+  "Set returns the same type as the ptr"
+  [?id :inst/type :inst.type/set]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?type))
+
 
 (defrule validate [?id ?msg]
   "Binops must have the same types for all args"
