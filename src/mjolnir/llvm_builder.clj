@@ -576,14 +576,16 @@
   (unpack-args defs inst
                [ptr val]
                (let [return-type (-> inst
-                                     :node/return-type)
-                     filtered (filter (fn [member]
+                                     :node/return-type
+                                     :type/element-type)
+                     filtered (keep (fn [member]
                                         (when (= (:type.member/name member)
                                                  (:inst.set/member inst))
                                           (:type.member/idx member)))
                                       (-> return-type
                                           :type.member/_struct))
                      idx (first filtered)
+                     _ (assert (integer? idx) (str (d/touch idx)))
                      _ (assert idx (str "Member not found"
                                         (:inst.set/member inst)
                                         (vec (:type.member/_struct return-type))))
@@ -595,6 +597,37 @@
                                             (str "casted_" (:db/id inst)))
                      gep (llvm/BuildStructGEP builder casted idx (str "gep_" (:db/id inst)))]
                  (llvm/BuildStore builder val gep)
+                 ptr)))
+
+
+(defmethod build-instruction :inst.type/get
+  [d module builder fnc inst defs]
+  (unpack-args defs inst
+               [ptr]
+               (let [return-type (-> inst
+                                     :inst.arg/arg0
+                                     :node/return-type
+                                     :type/element-type)
+                     filtered (keep (fn [member]
+                                        (when (= (:type.member/name member)
+                                                 (:inst.get/member inst))
+                                          (:type.member/idx member)))
+                                      (-> return-type
+                                          :type.member/_struct))
+                     idx (first filtered)
+                     _ (assert idx (str "Member not found"
+                                        (:inst.get/member inst)
+                                        (d/touch return-type)
+                                        (vec (:type.member/_struct return-type))))
+                     _ (assert (integer? idx) (str (d/touch idx)))
+                     _ (assert (= 1 (count filtered)) (str "Duplicate member name" (vec filtered)))
+                     casted (llvm/BuildCast builder
+                                            llvm/LLVMBitcast
+                                            ptr
+                                            (build-type (pointer-to return-type))
+                                            (str "casted_" (:db/id inst)))
+                     gep (llvm/BuildStructGEP builder casted idx (str "gep_" (:db/id inst)))]
+                 (llvm/BuildLoad builder gep (str "get_"(:db/id inst)))
                  ptr)))
 
 (defn build [db]

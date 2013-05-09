@@ -460,7 +460,15 @@
           _ (assert idx "Idx error, did you validate first?")
           cptr (build (->Cast (->PointerType etp) ptr))
           gep (llvm/BuildStructGEP *builder* cptr idx (genname "get_"))] 
-      (llvm/BuildLoad *builder* gep (genname "load_")))))
+      (llvm/BuildLoad *builder* gep (genname "load_"))))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [ptr-id (write-ssa ptr)
+      inst-id (add-instruction :inst.type/get
+                               {:inst.arg/arg0 ptr-id
+                                :inst.get/member member})]
+     inst-id)))
 
 
 (defrecord EGet [vec member]

@@ -99,6 +99,7 @@
    :inst.cast/type #{:one :keyword}
 
    :inst.set/member #{:one :keyword}
+   :inst.get/member #{:one :keyword}
    
    :inst.gbl/name #{:one :string}
    :inst.call/fn #{:one :ref}

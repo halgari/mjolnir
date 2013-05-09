@@ -8,7 +8,7 @@
    [mjolnir.ssa :refer :all]
    [mjolnir.llvm-builder :refer :all]
    [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
-                          ->FunctionType VoidT ->ArrayType]]
+                          ->FunctionType VoidT ->ArrayType ->PointerType]]
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
                                 ->ASet ->AGet ->Do ->Module]]
    [mjolnir.constructors-init :refer [defnf]]
@@ -248,8 +248,11 @@
   :members [Int64 x
             Float64 y])
 
-(defnf struct-fn [MyStruct foo -> MyStruct]
+(def MyStruct* (->PointerType MyStruct))
+
+(defnf struct-fn [MyStruct* foo -> MyStruct*]
   (set foo :x 42)
+  (get foo :x)
   foo)
 
 (deftest compile-struct

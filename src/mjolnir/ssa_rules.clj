@@ -120,11 +120,31 @@
   (return-type ?arg0 ?arg0-t)
   [?arg0-t :type/element-type ?type])
 
+
+(defrule member-idx [?tp ?nm ?idx ?member-tp]
+  "Gets the idx of a member"
+  [?mbr :type.member/struct ?tp]
+  [?mbr :type.member/idx ?idx]
+  [?mbr :type.member/name ?nm]
+  [?mbr :type.member/type ?member-tp])
+
 (defrule return-type [?id ?type]
   "Set returns the same type as the ptr"
   [?id :inst/type :inst.type/set]
   [?id :inst.arg/arg0 ?arg0]
   (return-type ?arg0 ?type))
+
+(defrule return-type [?id ?type]
+  "Get returns the member type"
+  [?id :inst/type :inst.type/get]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?arg0-t)
+  [?arg0-t :type/element-type ?etype]
+  [?id :inst.get/member ?nm]
+  (member-idx ?etype ?nm ?idx ?type))
+
+
+
 
 
 (defrule validate [?id ?msg]
