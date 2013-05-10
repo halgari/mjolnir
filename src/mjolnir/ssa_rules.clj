@@ -250,6 +250,12 @@
   [(identity :inst.cast.type/bitcast) ?op])
 
 (defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
+  "Functions can be bitcast"
+  [?arg0-t :node/type :type/fn]
+  [?arg1-t :node/type :type/pointer]
+  [(identity :inst.cast.type/bitcast) ?op])
+
+(defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
   "Larger Ints truncate to smaller ints"
   [?arg0-t :node/type :type/pointer]
   [?arg1-t :node/type :type/int]

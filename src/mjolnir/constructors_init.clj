@@ -301,6 +301,15 @@
 
 (defn- convert-form-1 [x]
   (cond
+   (and (seq? x)
+        (symbol? (first x))
+        (> (count (name (first x))) 2)
+        (= (.substring (name (first x)) 0 2) ".-"))
+   (convert-form (list 'get
+                       (fnext x)
+                       (keyword (.substring (name (first x)) 2))))
+
+   
    (seq? x)
    (convert-form x)
    
@@ -312,7 +321,7 @@
 
    (set? x)
    (into #{} (convert-form x))
-
+   
    (and (symbol? x)
         (constructor? x))
    (let [s

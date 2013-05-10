@@ -59,7 +59,6 @@
 (defmulti build-type :node/type)
 
 (defmulti build-instruction (fn [d module builder fn inst defs]
-                              (println (:db/id inst))
                               (:inst/type inst)))
 
 (defmulti build-terminator (fn [module builder fn inst defs]
@@ -88,6 +87,9 @@
   [x]
   (llvm/VoidType))
 
+(defmethod encode-const :type/pointer
+  [tp val]
+  (llvm/ConstNull (build-type tp)))
 
 
 (defmethod build-type :type/float
@@ -314,6 +316,14 @@
                 blocks)]
       (link-phi-nodes this defs))))
 
+(defmethod build-item :node.type/global
+  [db-val module {name :global/name type :global/type :as this}]
+  (when-not (:global/extern? this)
+    (let [gbl (llvm/GetNamedGlobal module name)]
+      (assert gbl (str "Can't find Global " (pr-str name)))
+      (llvm/SetInitializer gbl (encode-const type val))
+      gbl)))
+
 
 (defmethod build-instruction :default
   [d module builder fn itm defs]
@@ -386,6 +396,11 @@
   (unpack-args defs inst
                [dest]
                (llvm/BuildBr builder dest)))
+
+(defmethod build-instruction :inst.type/sizeof
+  [d module builder fn inst defs]
+  (assoc defs inst
+          (llvm/SizeOf (build-type (:inst.sizeof/type inst)))))
 
 (defmethod build-instruction :inst.type/br
   [d module builder fn inst defs]
@@ -496,6 +511,15 @@
      (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (str (:db/id inst)))
      (assoc defs inst))))
 
+(defmethod build-instruction :inst.type/callp
+  [d module builder fn inst defs]
+  (let [args (map defs (args-seq inst))
+        fnc (defs (:inst.callp/fn inst))]
+    (assert (and (every? identity args) fnc))
+    (->>
+     (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (str (:db/id inst)))
+     (assoc defs inst))))
+
 
 (defmethod build-instruction :inst.type/malloc
   [d module builder fn inst defs]
@@ -586,7 +610,6 @@
   [d module builder fn inst defs]
   (unpack-args defs inst
                [val]
-               (println (d/touch inst))
                (let [to-type (-> inst
                                  :node/return-type
                                  build-type)
@@ -660,8 +683,7 @@
                                             (build-type (pointer-to return-type))
                                             (str "casted_" (:db/id inst)))
                      gep (llvm/BuildStructGEP builder casted idx (str "gep_" (:db/id inst)))]
-                 (llvm/BuildLoad builder gep (str "get_"(:db/id inst)))
-                 ptr)))
+                 (llvm/BuildLoad builder gep (str "get_"(:db/id inst))))))
 
 (defn build [db]
   (let [globals (->> (q '[:find ?id

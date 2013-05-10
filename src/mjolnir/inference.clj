@@ -55,26 +55,27 @@
         data (map (fn [[id attr val]]
                     [:db/add id attr val])
                   nodes)]
-    (d/transact conn data)
-    (let [remaining (concat (q '[:find ?id ?attr
+    @(d/transact conn data)
+    (let [db-val (db conn)
+          remaining (concat (q '[:find ?id ?attr
                                  :where
                                  [?id :node/return-type ?tp]
                                  [?tp :node/type :node.type/unknown]
                                  [(identity :node/return-type) ?attr]]
-                               (db conn))
+                               db-val)
                             (q '[:find ?id ?attr
                                  :where
                                  [?id :inst.cast/type :inst.cast/unknown]
                                  [?id :node/return-type ?tp-to]
                                  [?tp-to :node/type ?data1]
                                  [(identity :inst.cast/type) ?attr]]
-                               (db conn)))]
+                               db-val))]
       (when-not (= 0 (count remaining))
         (println "Remaining nodes...")
         (println (pr-str (q '[:find ?nm
                               :where
                               [_ :fn/name ?nm]]
-                            (db conn))))
+                            db-val)))
         (doseq [[id attr] remaining]
           (let [ent (d/entity db-val id)]
             (println

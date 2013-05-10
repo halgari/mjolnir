@@ -252,7 +252,7 @@
 
 (defnf struct-fn [MyStruct* foo -> Float64*]
   (set foo :x 42)
-  (get foo :x)
+  (.-x foo)
   (Float64* foo))
 
 (deftest compile-struct
