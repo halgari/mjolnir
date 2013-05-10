@@ -11,28 +11,25 @@
 (defn c-do [& body]
   (exp/->Do body))
 
-(defn c-iadd [a b]
-  (exp/->IAdd a b))
-
-(defn c-isub [a b]
-  (exp/->ISub a b))
-
-(defn c-fdiv [a b]
-  (exp/->FDiv a b))
-
-(defn c-* [& exprs]
-  (exp/->*Op exprs))
-
-(defn c-+ [& exprs]
-  (exp/->+Op exprs))
-
-(defn c-- [& exprs]
-  (exp/->-Op exprs))
-
-(defn c-and [& exprs]
-  (reduce exp/->And
+(defn gen-binops [op exprs]
+  (reduce (partial exp/->Binop op)
           (first exprs)
           (next exprs)))
+
+(defn c-* [& exprs]
+  (gen-binops :* exprs))
+
+(defn c-+ [& exprs]
+  (gen-binops :+ exprs))
+
+(defn c-- [& exprs]
+  (gen-binops :- exprs))
+
+(defn c-div [& exprs]
+  (gen-binops :div exprs))
+
+(defn c-and [& exprs]
+  (gen-binops :and exprs))
 
 #_(defn c-module
   [& body]
@@ -53,8 +50,7 @@
                  :linkage ~linkage
             :name ~name
                  :body (let ~(vec (mapcat (fn [x idx] `[~x
-                                                        (exp/->Argument ~idx
-                                                                        (nth (:arg-types ~tp) ~idx))])
+                                                        (exp/->Arg ~idx)])
                                      args
                                      (range)))
                     (if ~(empty? body)
@@ -78,10 +74,10 @@
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
-         (exp/->Call (exp/->GetGlobal (if ~(:exact (meta name))
+         (exp/->Call (exp/->Gbl (if ~(:exact (meta name))
                                      ~extern-name
-                                     (str nsname# "/" ~(clojure.core/name name)))
-                                   (c-fn-t ~(mapv first args) ~ret-type)) (vec args#)))
+                                     (str nsname# "/" ~(clojure.core/name name))))
+                     (vec args#)))
            f# (c-fn (if ~(:exact (meta name))
                       ~extern-name
                       (str nsname# "/" ~(clojure.core/name name)))
@@ -96,10 +92,10 @@
   (assert (= arrow '->) "missing '-> before type")
   `(exp/->Const ~tp ~val))
 
-(defn c-or [a b]
-  (exp/->Or a b))
+(defn c-or [& exprs]
+  (gen-binops :or exprs))
 
-(defn c-is [a b]
+(defn c-= [a b]
   (exp/->Cmp := a b))
 
 (defn c-< [a b]
@@ -121,8 +117,7 @@
   (c-+ a 1))
 
 (defn c-module [includes & body]
-  (doto (exp/->Module "main"
-                      (-> (reduce (fn [a x]
+  (doto (exp/->Module (-> (reduce (fn [a x]
                                     (if (namespace x)
                                       (let [exp (get-in @registered-globals
                                                     [(symbol (namespace x))
@@ -146,10 +141,10 @@
     #_println))
 
 (defn c-aset [arr idx val]
-  (exp/->ASet arr (if (vector? idx) idx [idx]) val))
+  (exp/->ASet arr idx val))
 
 (defn c-aget [arr idx]
-  (exp/->AGet arr (if (vector? idx) idx [idx])))
+  (exp/->AGet arr idx))
 
 (defn c-eget [vec idx]
   (exp/->EGet vec idx))
@@ -157,8 +152,8 @@
 (defn c-eset [vec idx val]
   (exp/->ESet vec idx val))
 
-(defn c-bitcast [a tp]
-  (exp/->BitCast a tp))
+(defn c-cast [tp a]
+  (exp/->Cast tp a))
 
 (defmacro c-local [nm]
   `(exp/->Local ~(name nm)))
@@ -174,21 +169,16 @@
                                  sbinds)]
                    (c-do ~@body)))))
 
-(defmacro c-recur [& items]
-  (let [arr (butlast items)
-        _ (assert (or (= (last arr) '->)
-                      (= (last arr) "->")) "Missing type at end of recur")
-        tp (last items)
-        items (butlast arr)]
-    `(exp/->Recur ~(vec items) ~tp)))
+(defn c-recur [& items]
+  (exp/->Recur (vec items)))
 
 (defmacro c-dotimes [[sym times] & body]
   `(exp/->Loop [[~(name sym) 0]]
               (let [~sym (c-local ~sym)]
                 (exp/->Do [~@body
-                           (c-if (c-is ~times ~sym)
+                           (c-if (c-= ~times ~sym)
                                  0
-                                 (c-recur (c-iadd 1 ~sym) "->" tp/Int64))]))))
+                                 (c-recur (c-+ 1 ~sym)))]))))
 
 (defmacro c-let [bindings & body]
   (reduce (fn [a [local binding]]
@@ -200,9 +190,9 @@
           (reverse (partition 2 bindings))))
 
 (defn c-malloc
-  "Mallocs count number of items of type: type"
-  [type count]
-  (exp/->Malloc type count))
+  "Mallocs a instance of the given type"
+  [type]
+  (exp/->Malloc type))
 
 (defn c-free
   "Constructs an expression that calls free on the given pointer"
@@ -265,14 +255,24 @@
 (defmacro c-def [nm val arrow tp]
   (assert (= arrow '->) "must include a -> and a type")
   `(let [nsname# (.getName ~'*ns*)]
-     (def ~nm (exp/->GetGlobal (str nsname# "/" ~(name nm))
-                               ~tp))
+     (def ~nm (exp/->Gbl (str nsname# "/" ~(name nm))))
      (register-global
       nsname#
       ~(name nm)
       (c-global (str nsname# "/" ~(name nm))
                 ~val
                 ~tp))))
+
+
+(defmacro c-for [[var [from to step]] & body]
+  `(c-let [to# ~to]
+          (c-loop [~var ~from]
+                  (c-if (c-< ~var to#)
+                        (c-do ~@body
+                              (c-recur (c-+ ~var ~step)))
+                        ~var))))
+
+
 
 
 ;; Black magic is here
@@ -286,3 +286,58 @@
         nvar))))
 
 
+(defn- constructor [sym]
+  (let [sym (if (= (name sym) "/")
+              (symbol "div")
+              sym)
+        s (symbol (str "c-" (name sym)))
+        var ((ns-publics (the-ns 'mjolnir.constructors-init)) s)]
+    var))
+
+(defn- constructor? [sym]
+  (not (nil? (constructor sym))))
+
+(declare convert-form)
+
+(defn- convert-form-1 [x]
+  (cond
+   (and (seq? x)
+        (symbol? (first x))
+        (> (count (name (first x))) 2)
+        (= (.substring (name (first x)) 0 2) ".-"))
+   (convert-form (list 'get
+                       (fnext x)
+                       (keyword (.substring (name (first x)) 2))))
+
+   
+   (seq? x)
+   (convert-form x)
+   
+   (vector? x)
+   (into [] (convert-form x))
+
+   (map? x)
+   (into {} (convert-form x))
+
+   (set? x)
+   (into #{} (convert-form x))
+   
+   (and (symbol? x)
+        (constructor? x))
+   (let [s
+         (symbol "mjolnir.constructors-init" (str "c-" (if (= (name x) "/")
+                                                         "div"
+                                                         (symbol x))))]
+     s)
+   
+   
+   :else
+   x))
+
+(defn- convert-form [body]
+  (doall (map convert-form-1 body)))
+
+(defmacro defnf [& body]
+  (cons
+   'mjolnir.constructors-init/c-defn
+   (doall (map convert-form-1 body))))

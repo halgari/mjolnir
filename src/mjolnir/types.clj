@@ -1,24 +1,31 @@
 (ns mjolnir.types
   (:require [mjolnir.llvmc :as llvm]
             [mjolnir.config :refer :all]
+            [mjolnir.ssa :refer :all]
             [mjolnir.targets.target :refer :all])
   (:import [com.sun.jna Native Pointer]))
+
 
 (defmacro assure [pred]
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
                       " got: " (pr-str ~(second pred)))))
 
+(defmulti construct-expr (fn [type & more] type))
+
 
 (defmacro validate-all [& body]
   `(apply valid? ~(vec body)))
 
-(defmacro assure-same-type [& body]
+#_(defmacro assure-same-type [& body]
   `(reduce (fn [a# x#]
              (assert (= a# x#)
                      (str "Expected same types, "
                       "at: " (pr-str (meta (:location ~'this)))
-                      " got: " (pr-str ~(vec body)))))
-           ~(vec body)))
+                      " got: " (pr-str ~(vec body)))))e
+                      ~(vec body)))
+
+(defmacro assure-same-type [& args]
+  (identity 1))
 
 (defprotocol Validatable
   (validate [this]))
@@ -58,7 +65,16 @@
     (llvm/IntType width))
   ConstEncoder
   (encode-const [this val]
-    (llvm/ConstInt (llvm-type this) val true)))
+    (llvm/ConstInt (llvm-type this) val true))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [this-id (singleton
+               {:node/type :type/int
+                :type/width width}
+               this)]
+     this-id)))
+
 
 (defrecord VoidType []
   Validatable
@@ -66,7 +82,13 @@
             true)
   Type
   (llvm-type [this]
-             (llvm/VoidType)))
+    (llvm/VoidType))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [this-id (singleton
+               {:node/type :type/void})]
+     this-id)))
 
 (defn integer-type? [tp]
   (instance? IntegerType tp))
@@ -82,7 +104,15 @@
       64 (llvm/DoubleType)))
   ConstEncoder
   (encode-const [this val]
-    (llvm/ConstReal (llvm-type this) val)))
+    (llvm/ConstReal (llvm-type this) val))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [id (singleton
+          {:node/type :type/float
+           :type/width width}
+          this)]
+     id)))
 
 (defn float-type? [tp]
   (instance? FloatType tp))
@@ -112,7 +142,18 @@
         (let [nm (:name val)
               ng (llvm/GetNamedGlobal *module* nm)]
           (assert ng (str "Could not find global: " nm))
-          ng)))))
+          ng))))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [tp (add-to-plan etype)
+      this-id (singleton {:node/type :type/pointer
+                          :type/element-type tp}
+                         this)]
+     this-id))
+  clojure.lang.IFn
+  (invoke [this val]
+    (construct-expr :->Cast this val)))
 
 
 
@@ -150,7 +191,16 @@
     (llvm/ArrayType (llvm-type etype) cnt))
   ElementPointer
   (etype [this]
-    (:etype this)))
+    (:etype this))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [tp (add-to-plan etype)
+      this-id (singleton {:node/type :type/array
+                          :type/element-type tp
+                          :type/length cnt}
+                         this)]
+     this-id)))
 
 (defrecord FunctionType [arg-types ret-type]
   Validatable
@@ -162,7 +212,33 @@
     (llvm/FunctionType (llvm-type ret-type)
                        (llvm/map-parr llvm-type arg-types)
                        (count arg-types)
-                       false)))
+                       false))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [args (add-all (map add-to-plan arg-types))
+      ret (add-to-plan ret-type)
+      seq (assert-seq args)
+      this-id (singleton (merge {:node/type :type/fn
+                                 :type.fn/return ret}
+                                (when seq
+                                  {:type.fn/arguments seq})))
+      _ (assert-all (map (fn [x idx]
+                           [{:fn.arg/type x
+                             :fn.arg/idx idx
+                             :fn.arg/fn this-id}
+                            nil])
+                      args
+                      (range)))]
+     this-id)))
+
+
+(comment
+  (defn flatten-struct [tp]
+    (->> (take-while (complement nil?)
+                     (iterate :extends tp))
+         reverse
+         (mapcat :members))))
 
 
 (defn flatten-struct [tp]
@@ -170,6 +246,7 @@
                    (iterate :extends tp))
        reverse
        (mapcat :members)))
+
 
 (defn seq-idx [col ksel k]
   (-> (zipmap (map ksel col)
@@ -183,20 +260,31 @@
 
 
 (defrecord StructType [name extends members]
-  Validatable
-  (validate [this]
-    (when extends
-      (assure (instance? StructType extends)))
-    (doseq [[tp name] members]
-      (assure (keyword? name))
-      (assure (extends? Type (class tp)))))
-  Type
-  (llvm-type [this]
-    (let [mems (flatten-struct this)]
-      (llvm/StructType (llvm/map-parr (comp llvm-type first)
-                                      mems)
-                       (count mems)
-                       true))))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [extends-id (if extends
+                   (add-to-plan extends)
+                   (no-op))
+      member-ids (->> (flatten-struct this)
+                      (map first)
+                      (map add-to-plan)
+                      add-all)
+      struct-id (assert-entity (merge {:node/type :type/struct}
+                                      (when extends-id
+                                        {:type.struct/extends extends-id})))
+      members-idx (assert-all (map
+                               (fn [id name idx]
+                                 [{:node/type :type/member
+                                   :type.member/idx idx
+                                   :type.member/name name
+                                   :type.member/type id
+                                   :type.member/struct struct-id}
+                                  nil])
+                               member-ids
+                               (map second (flatten-struct this))
+                               (range)))]
+     struct-id)))
 
 (defn StructType? [tp]
   (instance? StructType tp))
