@@ -126,6 +126,7 @@
 (defnative Pointer LLVMBuildArrayMalloc)
 (defnative Pointer LLVMBuildGEP)
 (defnative Pointer LLVMBuildBitCast)
+(defnative Pointer LLVMBuildCast)
 (defnative Pointer LLVMConstString)
 (defnative Pointer LLVMConstInt)
 (defnative Integer LLVMCountStructElementTypes)
@@ -180,6 +181,7 @@
 (defnative Pointer LLVMBuildMalloc)
 (defnative Pointer LLVMSizeOf)
 (defnative Pointer LLVMConstNull)
+(defnative Pointer LLVMBuildBinOp)
 
 (defnative Pointer LLVMBuildExtractElement)
 (defnative Pointer LLVMBuildInsertElement)
@@ -301,8 +303,6 @@
    LLVMLinkerPrivateWeakDefAutoLinkage]) ; Like LinkerPrivateWeak, but possibly hidden. 
 
 
-(def LLVMIntEQ 32)
-
 (defenum LLVMIntPredicate
   32
   [LLVMIntEQ
@@ -333,6 +333,77 @@
    LLVMRealULE
    LLVMRealUNE
    LLVMRealPredicateTrue])
+
+(defenum LLVMOpcode
+  1
+  [;; Terminators Instructions
+   LLVMRet
+   LLVMBr
+   LLVMSwitch
+   LLVMIndirectBr
+   LLVMInvoke
+   _Removed
+   LLVMUnreachable
+
+   ;; Standard Binary Operators
+   LLVMAdd
+   LLVMFAdd
+   LLVMSub
+   LLVMFSub
+   LLVMMul
+   LLVMFMul
+   LLVMUDiv
+   LLVMSDiv
+   LLVMFDiv
+   LLVMURem
+   LLVMSRem
+   LLVMFRem
+   ;; Logical operators
+   LLVMShl
+   LLVMLShr
+   LLVMAShr
+   LLVMAnd
+   LLVMOr
+   LLVMXor
+   ;; Memory Operators
+   LLVMAlloca
+   LLVMLoad
+   LLVMStore
+   LLVMGetElementPtr
+   ;; Cast Operators
+   LLVMTrunc
+   LLVMZExt
+   LLVMSExt
+   LLVMFPToUI
+   LLVMFPToSI
+   LLVMUIToFP
+   LLVMSIToFP
+   LLVMFPTrunc
+   LLVMFPExt
+   LLVMPtrToInt
+   LLVMIntToPtr
+   LLVMBitcast
+   ;; Other
+   LLVMICmp
+   LLVMFCmp
+   LLVMPHI
+   LLVMCall
+   LLVMSelect
+   LLVMUserOp1
+   LLVMUserOp2
+   LLVMVAArg
+   LLVMExtractElement
+   LLVMInsertElement
+   LLVMShuffleVector
+   LLVMExtractValue
+   LLVMInsertValue
+   ;; Atomics
+   LLVMFence
+   LLVMAtomicCmpXchg
+   LLVMAtomicRMW
+   ;; Exception handling
+   LLVMResume
+   LLVMLandingPad])
 
 (defnative Integer LLVMInitializeCppBackendTargetInfo)
 (defnative Integer LLVMInitializeCppBackendTarget)

@@ -2,6 +2,7 @@
   (:gen-class)
   (:require
    [mjolnir.config :as config]
+   [mjolnir.core :refer [to-db to-llvm-module]]
    [mjolnir.types :refer :all]
    [mjolnir.expressions :refer :all]
    [mjolnir.constructors-init :as costructors-init]
@@ -45,8 +46,8 @@
 
 ;; Simple constructor fn for allocating a struct from GC memory
 (defn tmalloc [tp]
-  (c/bitcast (GC_malloc (->SizeOf tp))
-             (->PointerType tp)))
+  ((->PointerType tp)
+   (GC_malloc (->SizeOf tp))))
 
 ;; Define some helper pointer types 
 (def WObject* (->PointerType WObject))
@@ -91,12 +92,6 @@
 ;; Once we're done, we're going to have a set of functions that look
 ;; something like this:
  
-#_(c/defn wrap-WInt64 [Int64 v -> WObject*]
-  (-> (tmalloc WInt64)
-      (c/set :type Int64-type)
-      (c/set :int64-value v)
-      (c/bitcast WObject*)))
-
 (defn- symstr
   "Like str but the end result is a symbol"
   [& more]
@@ -108,10 +103,9 @@
   [[wtp tpid attr vtp]]
   `(c/defn ~(symstr "wrap-" wtp) [~vtp v# ~'-> WObject*]
      (c/let [a# (tmalloc ~wtp) ]
-       (-> a#
-        (c/set :type ~tpid)
-        (c/set ~attr v#)
-        (c/bitcast WObject*)))))
+            (WObject* (-> a#
+                          (c/set :type ~tpid)
+                          (c/set ~attr v#))))))
 
 (defn debug [x]
   (pprint x)
@@ -119,7 +113,7 @@
 
 (defn gen-unwrap-fn [[wtp tpid attr vtp]]
   `(c/defn ~(symstr "unwrap-" wtp) [WObject* v# ~'-> ~vtp]
-     (c/get (c/bitcast v# (->PointerType ~wtp)) ~attr)))
+     (c/get ((->PointerType ~wtp) v#) ~attr)))  
 
 
 
@@ -157,7 +151,7 @@
 
 ;; Comparison of two Int64s
 (c/defn WInt64-= [WObject* self WObject* a WObject* b -> WObject*]
-  (c/if (c/is (unwrap-WInt64 a)
+  (c/if (c/= (unwrap-WInt64 a)
               (unwrap-WInt64 b))
         (cached-WInt64 1)
         (cached-WInt64 0)))
@@ -169,15 +163,15 @@
 
 ;; Given a WFn, invoke it with no args
 (c/defn WFn-invoke0 [WObject* fno -> WObject*]
-  (->CallPointer (c/bitcast (unwrap-WFn fno) TNullaryFn*) [fno]))
+  (->CallPointer (TNullaryFn* (unwrap-WFn fno)) [fno]))
 
 ;; Given a WFn, invoke it with one arg
 (c/defn WFn-invoke1 [WObject* fno WObject* a -> WObject*]
-  (->CallPointer (c/bitcast (unwrap-WFn fno) TUnaryFn*) [fno a]))
+  (->CallPointer (TUnaryFn* (unwrap-WFn fno)) [fno a]))
 
 ;; Given a WFn, invoke it with two args
 (c/defn WFn-invoke2 [WObject* fno WObject* a WObject* b -> WObject*]
-  (->CallPointer (c/bitcast (unwrap-WFn fno) TBinaryFn*) [fno a b]))
+  (->CallPointer (TBinaryFn* (unwrap-WFn fno)) [fno a b]))
 
 ;; Dispatch to a invoke based on a given argc
 (def arg-dispatch
@@ -194,8 +188,8 @@
 (def ^:dynamic locals)
 
 ;; Generate code that wraps a global fn and returns a WFn
-(defn wrap-global-fn [f tp]
-  (wrap-WFn (c/bitcast (->GetGlobal f tp) Int8*)))
+(defn wrap-global-fn [f]
+  (wrap-WFn (Int8* (->Gbl f))))
 
 
 ;; These are known global fns, we provide two ways to call each
@@ -204,18 +198,17 @@
 ;; direct method is most commonly used when the function being called
 ;; is referenced by name as the first item in a s-expression. 
 (def sym-maps
-  {'+ {:indirect (wrap-global-fn ::WInt64-+ TBinaryFn)
-       :direct [::WInt64-+ TBinaryFn]}
-   '= {:indirect (wrap-global-fn ::WInt64-= TBinaryFn)
-       :direct [::WInt64-= TBinaryFn]}
-   'print {:indirect (wrap-global-fn ::WInt64-print TUnaryFn)
-           :direct [::WInt64-print TUnaryFn]}})
+  {'+ {:indirect (wrap-global-fn ::WInt64-+)
+       :direct ::WInt64-+}
+   '= {:indirect (wrap-global-fn ::WInt64-=)
+       :direct ::WInt64-=}
+   'print {:indirect (wrap-global-fn ::WInt64-print)
+           :direct ::WInt64-print}})
 
 
 ;; This is global init code for the entire runtime.
 (c/defn init-all [-> Int64]
-  (c/let [cache (c/bitcast (GC_malloc 8192)
-                           WObject**)]
+  (c/let [cache (WObject** (GC_malloc 8192))]
          (->Store WInt64-cache cache)
          (c/dotimes [x 1024]
                     (c/aset cache
@@ -227,10 +220,7 @@
 (c/defn ^:exact main [-> Int64]
   (GC_init)
   (init-all)
-  (unwrap-WInt64 (WFn-invoke0 (wrap-global-fn :-run TNullaryFn))))
-
-#_(c/defn WFn-test [-> TBinaryFn]
-  (c/bitcast (unwrap-WFn (sym-maps '+)) TBinaryFn))
+  (unwrap-WInt64 (WFn-invoke0 (wrap-global-fn :-run))))
 
 ;; Given a symbol, try to find where it what it would refer to given
 ;; the current context. 
@@ -264,9 +254,8 @@
 ;; Define a new global function. 
 (defmethod compile-builtin :defn
   [_ nm args & body]
-  (let [fn-t (argc->fn-t (count args))
-        new-global {:indirect (wrap-global-fn (name nm) fn-t)
-                    :direct [(name nm) fn-t]}]
+  (let [new-global {:indirect (wrap-global-fn (name nm))
+                    :direct (name nm)}]
     (swap! globals assoc nm new-global)
     (->Fn (name nm)
           (argc->fn-t (count args))
@@ -275,13 +264,13 @@
                             {nm new-global}
                             (zipmap
                              args
-                             (map #(->Argument % WObject*)
+                             (map #(->Arg %)
                                   (range 1 (inc (count args))))))]
             (->Do (mapv compile-item body))))))
 
 (defmethod compile-builtin :if
   [_ test then else]
-  (c/if (c/is (unwrap-WInt64 (compile-item test))
+  (c/if (c/= (unwrap-WInt64 (compile-item test))
               0)
         (compile-item else)
         (compile-item then)))
@@ -301,7 +290,7 @@
     ;; back to the slower method of using wrapped functions
     (if (and (map? resolved)
              (:direct resolved))
-      (->Call (apply ->GetGlobal (:direct resolved))
+      (->Call (->Gbl (:direct resolved))
               (concat [(c/const nil -> WObject*)] (mapv compile-item args)))
       (apply
        invoke
@@ -321,9 +310,11 @@
                         (mapv compile-item data)
                         (apply c/module ['examples.simple-lisp])))
           _ (print "Building Module: ")
-          built (time (build module))
+          built (time (-> module
+                          to-db
+                          to-llvm-module))
           _ (print "Optimizing: ")
-          optimized (time (optimize built))]
+          optimized built #_(time (optimize built))]
       optimized))
 
 (defn -main [program & opts]

@@ -7,4 +7,4 @@
          (fib (+ a -2))))))
 
 (defn -run []
-  (print (fib 40)))
+  (fib 10))
