@@ -27,6 +27,29 @@ LLVM-c - Internally, LLVM exposes the C++ api as a c library known as llvm-c.
 
 LLVM - And finally, at the bottom we have the llvm library
 
+## defnf (Def Native Fn)
+
+Mjolnir supports a fairly basic, but powerful macro known as defnf. This macro acts much like Clojure's defn macro, but with C-like semantics:
+
+    (defnf fib [Int64 x -> Int64]
+        (if (< x 2)
+            x
+            (+ (fib (- x 1))
+               (fib (- x 2)))))
+               
+The code inside the macro will be translated to mjolnir constructors (via pre-fixing c- to a symbol if possible). Then the entire function will be type infered. 
+
+If a given variable is a struct, .- can be used to get a member:
+
+    (defnf myfn [Point* pnt -> Int64]
+        (.-x pnt))  
+        
+In addition, pointer types support IFn, and when called, will create a cast operation:
+
+    (myfn (Point* (malloc (sizeof Point))))
+    
+    
+
 ## Supported Platforms
 
 At this time only OSX (64-bit) and NVidia PTX (on OSX) is supported. Adding new targets is easy, so if you want to add support for a platform, take a crack at it!. 
