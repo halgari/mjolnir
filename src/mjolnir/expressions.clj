@@ -48,7 +48,8 @@
       expr-id (write-ssa expr)
       casted (add-instruction :inst.type/cast
                               {:inst.arg/arg0 expr-id
-                               :node/return-type tp-id})]
+                               :node/return-type tp-id
+                               :inst.cast/type :inst.cast/unknown})]
      casted)))
 
 (defmethod construct-expr :->Cast
@@ -312,9 +313,9 @@
                                (reduce
                                 (fn [acc [idx id]]
                                   (assoc acc (idx->arg idx) id))
-                                {:inst.arg/arg0 fn-id}
+                                {:inst.callp/fn fn-id}
                                 (map vector
-                                     (range 1 (inc (count arg-ids)))
+                                     (range)
                                      arg-ids)))]
      this-id)))
 
@@ -466,7 +467,8 @@
     (build (->ASet ptr [0] val)))
   SSAWriter
   (write-ssa [this]
-    (gen-plan
+    (write-ssa (->ASet ptr 0 val))
+    #_(gen-plan
      [ptr-id (write-ssa ptr)
       val-id (write-ssa val)
       this-id (add-instruction :inst.type/store
@@ -603,7 +605,7 @@
   (add-to-plan [this]
     (gen-plan
      [type-id (add-to-plan type)
-      this-id (assert-entity (merge {:node/type :type/global
+      this-id (assert-entity (merge {:node/type :node.type/global
                                      :global/name name
                                      :global/type type-id}
                                     (const-data val)))]

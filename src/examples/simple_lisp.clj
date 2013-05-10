@@ -188,7 +188,7 @@
 (def ^:dynamic locals)
 
 ;; Generate code that wraps a global fn and returns a WFn
-(defn wrap-global-fn [f tp]
+(defn wrap-global-fn [f]
   (wrap-WFn (Int8* (->Gbl f))))
 
 
@@ -198,11 +198,11 @@
 ;; direct method is most commonly used when the function being called
 ;; is referenced by name as the first item in a s-expression. 
 (def sym-maps
-  {'+ {:indirect (wrap-global-fn ::WInt64-+ TBinaryFn)
+  {'+ {:indirect (wrap-global-fn ::WInt64-+)
        :direct ::WInt64-+}
-   '= {:indirect (wrap-global-fn ::WInt64-= TBinaryFn)
+   '= {:indirect (wrap-global-fn ::WInt64-=)
        :direct ::WInt64-=}
-   'print {:indirect (wrap-global-fn ::WInt64-print TUnaryFn)
+   'print {:indirect (wrap-global-fn ::WInt64-print)
            :direct ::WInt64-print}})
 
 
@@ -220,7 +220,7 @@
 (c/defn ^:exact main [-> Int64]
   (GC_init)
   (init-all)
-  (unwrap-WInt64 (WFn-invoke0 (wrap-global-fn :-run TNullaryFn))))
+  (unwrap-WInt64 (WFn-invoke0 (wrap-global-fn :-run))))
 
 ;; Given a symbol, try to find where it what it would refer to given
 ;; the current context. 
@@ -254,8 +254,7 @@
 ;; Define a new global function. 
 (defmethod compile-builtin :defn
   [_ nm args & body]
-  (let [fn-t (argc->fn-t (count args))
-        new-global {:indirect (wrap-global-fn (name nm) fn-t)
+  (let [new-global {:indirect (wrap-global-fn (name nm))
                     :direct (name nm)}]
     (swap! globals assoc nm new-global)
     (->Fn (name nm)

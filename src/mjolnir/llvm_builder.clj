@@ -59,6 +59,7 @@
 (defmulti build-type :node/type)
 
 (defmulti build-instruction (fn [d module builder fn inst defs]
+                              (println (:db/id inst))
                               (:inst/type inst)))
 
 (defmulti build-terminator (fn [module builder fn inst defs]
@@ -150,6 +151,13 @@
                                                             linkage)))
     (llvm/SetLinkage f (llvm/kw->linkage :extern))
     f))
+
+(defmethod stub-global :node.type/global
+  [module {name :global/name type :global/type}]
+  (llvm/AddGlobalInAddressSpace module
+                                (build-type type)
+                                name
+                                (target/default-address-space *target*)))
 
 (defmulti build-item (fn [db module itm]
                        (:node/type itm)))
@@ -317,6 +325,8 @@
                                 (or (:const/int-value itm)
                                     (:const/float-value itm)))))
 
+
+
 (defmethod build-instruction :inst.type/arg
   [d module builder fn inst defs]
   (assoc defs inst
@@ -468,7 +478,8 @@
   (assert defs)
   (assoc defs
     itm
-    (llvm/GetNamedFunction module (:inst.gbl/name itm))))
+    (or (llvm/GetNamedFunction module (:inst.gbl/name itm))
+        (llvm/GetNamedGlobal module (:inst.gbl/name itm)))))
 
 (defmethod build-instruction :inst.type/jmp
   [d module builder fn inst defs]
@@ -523,6 +534,27 @@
                  (llvm/BuildStore builder val gep)
                  gep)))
 
+(defmethod build-instruction :inst.type/store
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr val]
+               (let [ret-type (-> inst
+                                  :inst.arg/arg0
+                                  :node/return-type
+                                  :type/element-type
+                                  pointer-type-to
+                                  build-type)
+                     casted (llvm/BuildBitCast builder ptr ret-type (str "casted_" (:db/id inst)))
+                     gep (llvm/BuildGEP builder
+                                        casted
+                                        (into-array Pointer [0])
+                                        1
+                                        (str "gep_" (:db/id inst)))]
+                 (llvm/BuildStore builder val gep)
+                 gep)))
+
+
+
 (defmethod build-instruction :inst.type/aget
   [d module builder fn inst defs]
   (unpack-args defs inst
@@ -554,11 +586,12 @@
   [d module builder fn inst defs]
   (unpack-args defs inst
                [val]
+               (println (d/touch inst))
                (let [to-type (-> inst
                                  :node/return-type
                                  build-type)
                      sub-type (cast-table (:inst.cast/type inst))]
-                 (assert sub-type (str "Unknown subtype for " (d/touch inst) (d/touch (:inst.cast/type inst)) to-type))
+                 (assert sub-type (str "Unknown subtype for " (d/touch inst) (d/touch (:node/return-type inst)) (:inst.cast/type inst) to-type))
                  (llvm/BuildCast builder sub-type val to-type (str "cast_" (:db/id inst))))))
 
 (defn pointer-to [x]

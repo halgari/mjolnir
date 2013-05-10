@@ -45,6 +45,7 @@
 (defrule infer-node [?id ?attr ?val]
   "infer casts"
   [?id :inst/type :inst.type/cast]
+  [?id :inst.cast/type :inst.cast/unknown]
   [?id :inst.arg/arg0 ?arg0]
   (return-type ?arg0 ?arg0-t)
   [?id :node/return-type ?arg1-t]
@@ -103,7 +104,7 @@
 (defrule return-type [?id ?type]
   "Function pointer calls return the return type of the function they are calling"
   [?id :inst/type :inst.type/callp]
-  [?id :inst.arg/arg0 ?fn-src]
+  [?id :inst.callp/fn ?fn-src]
   (return-type ?fn-src ?ptr-t)
   [?ptr-t :type/element-type ?fn-t]
   [?fn-t :type.fn/return ?type])
@@ -243,7 +244,7 @@
   [(identity :inst.cast.type/si-to-fp) ?op])
 
 (defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
-  "Larger Ints truncate to smaller ints"
+  "Pointers are bitcast"
   [?arg0-t :node/type :type/pointer]
   [?arg1-t :node/type :type/pointer]
   [(identity :inst.cast.type/bitcast) ?op])

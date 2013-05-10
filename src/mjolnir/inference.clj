@@ -56,22 +56,33 @@
                     [:db/add id attr val])
                   nodes)]
     (d/transact conn data)
-    (let [remaining (q '[:find ?id
-                                     :where
-                                     [?id :node/return-type ?tp]
-                                     [?tp :node/type :node.type/unknown]]
-                       (db conn))]
+    (let [remaining (concat (q '[:find ?id ?attr
+                                 :where
+                                 [?id :node/return-type ?tp]
+                                 [?tp :node/type :node.type/unknown]
+                                 [(identity :node/return-type) ?attr]]
+                               (db conn))
+                            (q '[:find ?id ?attr
+                                 :where
+                                 [?id :inst.cast/type :inst.cast/unknown]
+                                 [?id :node/return-type ?tp-to]
+                                 [?tp-to :node/type ?data1]
+                                 [(identity :inst.cast/type) ?attr]]
+                               (db conn)))]
       (when-not (= 0 (count remaining))
         (println "Remaining nodes...")
-        (println (q '[:find ?nm
-                      :where
-                      [_ :fn/name ?nm]]
-                    (db conn)))
-        (doseq [node remaining]
-          (let [ent (d/entity db-val (first node))]
+        (println (pr-str (q '[:find ?nm
+                              :where
+                              [_ :fn/name ?nm]]
+                            (db conn))))
+        (doseq [[id attr] remaining]
+          (let [ent (d/entity db-val id)]
             (println
-             [(:inst/type ent)
-              (:node/return-type (:inst/type ent))
-              (:node/return-type (:inst/type ent))
-              (:inst.gbl/name ent)])))
+             (pr-str
+              [(:inst/type ent)
+               attr
+               (:node/type (:node/return-type ent))
+               (:node/type (:node/return-type (:inst.arg/arg0 ent)))
+               (:inst/type (:inst.arg/arg0 ent))
+               (:inst.gbl/name (:inst.arg/arg0 ent))]))))
         (assert false "inference fails")))))
