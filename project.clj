@@ -1,6 +1,6 @@
 (defproject mjolnir "0.1.5"
   :description "Compiler Toolkit using LLVM"
-  :url "http://example.com/FIXME"
+  :url "http://github.com/halgari/mjolnir"
   :license {:name "MIT License"}
   :dependencies [[org.clojure/clojure "1.5.1"]
                  [com.datomic/datomic-free "0.8.3826" ]
