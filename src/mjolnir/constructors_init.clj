@@ -155,6 +155,9 @@
 (defn c-cast [tp a]
   (exp/->Cast tp a))
 
+(defn c-size-of [tp]
+  (exp/->SizeOf tp))
+
 (defmacro c-local [nm]
   `(exp/->Local ~(name nm)))
 
@@ -309,6 +312,11 @@
                        (fnext x)
                        (keyword (.substring (name (first x)) 2))))
 
+   (and (seq? x)
+        (keyword? (first x)))
+   `(exp/->Call
+     (exp/->Gbl ~(first x))
+     ~(mapv convert-form-1 (next x)))
    
    (seq? x)
    (convert-form x)

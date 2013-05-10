@@ -163,7 +163,7 @@
 (defnf defnf-fib [Float64 x -> Float64]
   (if (< x 2.0)
     x
-    (+ (defnf-fib (- x 1.0))
+    (+ (::defnf-fib (- x 1.0))
        (defnf-fib (- x 2.0)))))
 
 (deftest compile-constructors
