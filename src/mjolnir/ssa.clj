@@ -46,6 +46,10 @@
    :fn.arg/idx #{:one :int}
    :fn.arg/fn #{:one :ref}
 
+   :global/name #{:one :string}
+   :global/type #{:one :ref}
+   :global/val #{:one :ref}
+
    :inst/block #{:one :ref}
    :inst/next #{:one :ref}
    :inst/type #{:one :keyword}
@@ -106,6 +110,10 @@
 
    :inst.cmp/pred #{:one :keyword}
    :isnt.cmp/sub-pred #{:one :keyword}
+
+   :inst.sizeof/type #{:one :ref}
+
+   :inst.callp/fn #{:one :ref}
 
    :inst.malloc/type #{:one :ref}
 

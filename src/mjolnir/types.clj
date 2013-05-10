@@ -10,6 +10,8 @@
   `(assert ~pred (str "at: " (pr-str (meta (:location ~'this)))
                       " got: " (pr-str ~(second pred)))))
 
+(defmulti construct-expr (fn [type & more] type))
+
 
 (defmacro validate-all [& body]
   `(apply valid? ~(vec body)))
@@ -148,7 +150,10 @@
       this-id (singleton {:node/type :type/pointer
                           :type/element-type tp}
                          this)]
-     this-id)))
+     this-id))
+  clojure.lang.IFn
+  (invoke [this val]
+    (construct-expr :->Cast this val)))
 
 
 

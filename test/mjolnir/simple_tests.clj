@@ -250,10 +250,10 @@
 
 (def MyStruct* (->PointerType MyStruct))
 
-(defnf struct-fn [MyStruct* foo -> MyStruct*]
+(defnf struct-fn [MyStruct* foo -> Float64*]
   (set foo :x 42)
   (get foo :x)
-  foo)
+  (Float64* foo))
 
 (deftest compile-struct
   (binding [*int-type* Int64

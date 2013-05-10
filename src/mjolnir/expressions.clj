@@ -51,6 +51,10 @@
                                :node/return-type tp-id})]
      casted)))
 
+(defmethod construct-expr :->Cast
+  [tp & args]
+  (apply ->Cast args))
+
 (def cmp-maps
   {:int {:= llvm/LLVMIntEQ
          :!= llvm/LLVMIntNE
@@ -136,7 +140,7 @@
   (write-ssa [this]
     (gen-plan
      [gbl (add-instruction :inst.type/gbl
-                           {:inst.gbl/name name}
+                           {:inst.gbl/name (full-name name)}
                            this)]
      gbl)))
 
@@ -148,7 +152,16 @@
   (return-type [this]
     Int64)
   (build [this]
-    (llvm/SizeOf (llvm-type tp))))
+    (llvm/SizeOf (llvm-type tp)))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [ret-type (add-to-plan *int-type*)
+      tp-id (add-to-plan tp)
+      this-id (add-instruction :inst.type/sizeof
+                               {:inst.sizeof/type tp-id
+                                :node/return-type ret-type})]
+     this-id)))
 
 (def binop-maps
   {:+ :inst.binop.type/add
@@ -280,24 +293,30 @@
                                this)]
      call-id)))
 
-(defrecord CallPointer [fn args]
-  Validatable
-  (validate [this]
-    (valid? fn)
-    (assure (FunctionType? (etype (return-type fn))))
-    (doseq [arg args]
-      (assure (Expression? arg)))
-    (let [cnt (count (:arg-types (etype (return-type fn))))]
-      (assure (= (count args) cnt))))
+(defrecord CallPointer [fnc args]
   Expression
   (return-type [this]
-    (:ret-type (etype (return-type fn))))
+    (:ret-type (etype (return-type fnc))))
   (build [this]
     (llvm/BuildCall *builder*
-                    (build fn)
+                    (build fnc)
                     (llvm/map-parr build args)
                     (count args)
-                    (genname "call_"))))
+                    (genname "call_")))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [fn-id (write-ssa fnc)
+      arg-ids (add-all (map write-ssa args))
+      this-id (add-instruction :inst.type/callp
+                               (reduce
+                                (fn [acc [idx id]]
+                                  (assoc acc (idx->arg idx) id))
+                                {:inst.arg/arg0 fn-id}
+                                (map vector
+                                     (range 1 (inc (count arg-ids)))
+                                     arg-ids)))]
+     this-id)))
 
 (defrecord Local [nm]
   SSAWriter
@@ -444,7 +463,16 @@
   (return-type [this]
     (return-type ptr))
   (build [this]
-    (build (->ASet ptr [0] val))))
+    (build (->ASet ptr [0] val)))
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [ptr-id (write-ssa ptr)
+      val-id (write-ssa val)
+      this-id (add-instruction :inst.type/store
+                               {:inst.arg/arg0 ptr-id
+                                :inst.arg/arg1 val-id})]
+     this-id)))
 
 
 (defrecord Get [ptr member]
@@ -570,7 +598,16 @@
     (llvm/AddGlobalInAddressSpace *module*
                     (llvm-type type)
                     name
-                    (target/default-address-space *target*))))
+                    (target/default-address-space *target*)))
+  IToPlan
+  (add-to-plan [this]
+    (gen-plan
+     [type-id (add-to-plan type)
+      this-id (assert-entity (merge {:node/type :type/global
+                                     :global/name name
+                                     :global/type type-id}
+                                    (const-data val)))]
+     this-id)))
 
 (defn kw->Global [module kw]
   (assert module "No Module Given")

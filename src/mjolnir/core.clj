@@ -1,5 +1,6 @@
 (ns mjolnir.core
   (:require
+   [mjolnir.expressions :as expr]
    [mjolnir.inference :refer [infer-all]]
    [mjolnir.validation :refer [validate]]
    [clojure.test :refer :all]

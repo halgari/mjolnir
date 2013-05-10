@@ -17,6 +17,11 @@
   [?id :fn/name ?name]
   [?id :fn/type ?type])
 
+(defrule global-def [?id ?name ?type]
+  "Functions are global entities"
+  [?id :global/name ?name]
+  [?id :global/type ?type])
+
 
 ;; Inference Rules
 
@@ -96,6 +101,14 @@
   [?fn-t :type.fn/return ?type])
 
 (defrule return-type [?id ?type]
+  "Function pointer calls return the return type of the function they are calling"
+  [?id :inst/type :inst.type/callp]
+  [?id :inst.arg/arg0 ?fn-src]
+  (return-type ?fn-src ?ptr-t)
+  [?ptr-t :type/element-type ?fn-t]
+  [?fn-t :type.fn/return ?type])
+
+(defrule return-type [?id ?type]
   "Arg instructions return the type from the function type"
   [?id :inst/type :inst.type/arg]
   [?id :inst/block ?block]
@@ -105,6 +118,13 @@
   [?id :inst.arg/idx ?idx]
   [?arg-node :fn.arg/idx ?idx]
   [?arg-node :fn.arg/type ?type])
+
+
+(defrule return-type [?id ?type]
+  "Store returns the ptr type"
+  [?id :inst/type :inst.type/store]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?type))
 
 (defrule return-type [?id ?type]
   "ASet returns the arr type"
