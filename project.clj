@@ -1,5 +1,5 @@
-(defproject mjolnir "0.1.0-SNAPSHOT"
-  :description "FIXME: write description"
+(defproject mjolnir "0.1.5"
+  :description "Compiler Toolkit using LLVM"
   :url "http://example.com/FIXME"
   :license {:name "MIT License"}
   :dependencies [[org.clojure/clojure "1.5.1"]
