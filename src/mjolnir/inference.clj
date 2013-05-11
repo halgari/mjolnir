@@ -7,45 +7,44 @@
             [clojure.core.logic.datomic :as ld]))
 
 (defn get-inferences [db]
-  (println "infering nodes...  ")
   (let [notype (ffirst (q '[:find ?id
                             :where
                             [?id :node/type :node.type/unknown]]
                           db))]
-    (time (concat (q '[:find ?id ?attr ?val
-                       :in $ % ?notype
-                       :where
-                       #_[?id :node/return-type ?notype]
-                       (infer-node ?id ?attr ?val)]
-                     db
-                     @rules
-                     notype)
-                  #_(q '[:find ?id ?attr ?val
-                       :in $ % ?notype
-                       :where
-                       #_[?id :node/return-type ?notype]
-                       (infer-cast-node ?id ?attr ?val)]
-                     db
-                     @rules
-                     notype)
-                  #_(q '[:find ?id ?attr ?val
-                       :in $ % ?notype
-                       :where
-                       #_[?id :node/return-type ?notype]
-                       (infer-binop-node ?id ?attr ?val)]
-                     db
-                     @rules
-                     notype)
-                  #_(->> (q '[:find ?id ?val
-                            :in $ %
-                            :where
-                            [?id :node/return-type ?notype]
-                            (infer-phi-return-type ?id ?val)]
-                          db
-                          @rules)
-                       (map
-                        (fn [[id val]]
-                          [id :node/return-type val])))))))
+    (concat (q '[:find ?id ?attr ?val
+                 :in $ % ?notype
+                 :where
+                 #_[?id :node/return-type ?notype]
+                 (infer-node ?id ?attr ?val)]
+               db
+               @rules
+               notype)
+            #_(q '[:find ?id ?attr ?val
+                   :in $ % ?notype
+                   :where
+                   #_[?id :node/return-type ?notype]
+                   (infer-cast-node ?id ?attr ?val)]
+                 db
+                 @rules
+                 notype)
+            #_(q '[:find ?id ?attr ?val
+                   :in $ % ?notype
+                   :where
+                   #_[?id :node/return-type ?notype]
+                   (infer-binop-node ?id ?attr ?val)]
+                 db
+                 @rules
+                 notype)
+            #_(->> (q '[:find ?id ?val
+                        :in $ %
+                        :where
+                        [?id :node/return-type ?notype]
+                        (infer-phi-return-type ?id ?val)]
+                      db
+                      @rules)
+                   (map
+                    (fn [[id val]]
+                      [id :node/return-type val]))))))
 
 (defn infer-all [conn]
   (let [db-val (db conn)
@@ -85,5 +84,12 @@
                (:node/type (:node/return-type ent))
                (:node/type (:node/return-type (:inst.arg/arg0 ent)))
                (:inst/type (:inst.arg/arg0 ent))
-               (:inst.gbl/name (:inst.arg/arg0 ent))]))))
+               (:inst.gbl/name (:inst.arg/arg0 ent))
+               (-> ent
+                   :inst/block
+                   :block/fn
+                   :fn/name)
+               (-> ent
+                   :inst/block
+                   :block/fn)]))))
         (assert false "inference fails")))))

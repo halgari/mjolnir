@@ -187,44 +187,41 @@
   "Commit processes the transaction with the associated connection, then updates all the tempids to match. You can then use plan-id to get the realized ent-ids"
   [{:keys [conn db new-ents updates valid-ids] :as plan}]
   (assert (and conn db))
-  (println "Writing to DB...")
-  (time
-   (let [ents (reduce
-               (fn [acc [ent id]]
-                 (assert (not (get acc id)) "Duplicate ids")
-                 (assoc acc id (assoc ent :db/id id)))
-               {}
-               new-ents)
-         _ (assert (= (set (keys ents))
-                      (set (keys valid-ids)))
-                   (pr-str (count (set (keys ents)))
-                           (count (set (keys valid-ids)))
-                           (count new-ents)))
-         data (-> (reduce
-                   (fn [acc [k attr val]]
-                     (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
-                                                         k
-                                                         (get valid-ids k)
-                                                         " in "
-                                                         (keys valid-ids)))
-                     (assoc-in acc [k attr] val))
-                   ents
-                   updates)
-                  vals)
-         _ (println "Datoms to insert: " (reduce + (map count data)))
-         _ (println "Entities to insert: " (count data))
-         {:keys [db-before db-after tempids tx-data]}
-         @(d/transact conn data)
-         ptempids (zipmap
-                   (keys (:tempids plan))
-                   (map (partial d/resolve-tempid db-after tempids)
-                        (vals (:tempids plan))))]
-     (assoc plan
-       :tempids ptempids
-       :db db-after
-       :db-before db-before
-       :new-ents nil
-       :singletons nil))))
+  (let [ents (reduce
+              (fn [acc [ent id]]
+                (assert (not (get acc id)) "Duplicate ids")
+                (assoc acc id (assoc ent :db/id id)))
+              {}
+              new-ents)
+        _ (assert (= (set (keys ents))
+                     (set (keys valid-ids)))
+                  (pr-str (count (set (keys ents)))
+                          (count (set (keys valid-ids)))
+                          (count new-ents)))
+        data (-> (reduce
+                  (fn [acc [k attr val]]
+                    (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
+                                                        k
+                                                        (get valid-ids k)
+                                                        " in "
+                                                        (keys valid-ids)))
+                    (assoc-in acc [k attr] val))
+                  ents
+                  updates)
+                 vals)
+
+        {:keys [db-before db-after tempids tx-data]}
+        @(d/transact conn data)
+        ptempids (zipmap
+                  (keys (:tempids plan))
+                  (map (partial d/resolve-tempid db-after tempids)
+                       (vals (:tempids plan))))]
+    (assoc plan
+      :tempids ptempids
+      :db db-after
+      :db-before db-before
+      :new-ents nil
+      :singletons nil)))
 
 (defn plan-id 
   [plan val]

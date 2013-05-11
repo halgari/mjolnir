@@ -4,7 +4,7 @@
 (def rules (atom []))
 
 (defmacro defrule [name args doc & body]
-  (println "Registered rule" name )
+  #_(println "Registered rule" name )
   (swap! rules conj `[(~name ~@args)
                       ~@body])
   nil)
@@ -139,7 +139,15 @@
   [?id :inst/type :inst.type/aget]
   [?id :inst.arg/arg0 ?arg0]
   (return-type ?arg0 ?arg0-t)
-  [?arg0-t :type/element-type ?type])
+  [?arg0-t :type/element-type ?type]
+  [?type :node/type ?nt])
+
+(defrule return-type [?id ?type]
+  "Nth returns the same type as the input"
+  [?id :inst/type :inst.type/nth]
+  [?id :inst.arg/arg0 ?arg0]
+  (return-type ?arg0 ?type))
+
 
 
 (defrule member-idx [?tp ?nm ?idx ?member-tp]

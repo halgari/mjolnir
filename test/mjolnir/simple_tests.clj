@@ -12,7 +12,7 @@
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
                                 ->ASet ->AGet ->Do ->Module]]
    [mjolnir.constructors-init :refer [defnf]]
-   [mjolnir.core :refer [to-db to-llvm-module]])
+   [mjolnir.core :refer [to-db to-llvm-module build-default-module get-fn]])
   (:alias c mjolnir.constructors))
 
 
@@ -262,5 +262,16 @@
     (-> (c/module ['mjolnir.simple-tests/struct-fn])
         to-db
         to-llvm-module)))
+
+(defnf test-dll [Int64 x -> Int64]
+  (+ x 1))
+
+
+(deftest compile-struct
+  (let [mod (-> (c/module ['mjolnir.simple-tests/test-dll])
+                build-default-module)
+        f (get-fn mod test-dll)]
+    (is (= (f 42) 43))))
+
 
 

@@ -168,6 +168,7 @@
   {:+ :inst.binop.type/add
    :- :inst.binop.type/sub
    :* :inst.binop.type/mul
+   :mod :inst.binop.type/mod
    :div :inst.binop.type/div
    :and :inst.binop.type/and
    :or :inst.binop.type/or})
@@ -412,6 +413,17 @@
      [arr-id (write-ssa arr)
       idx-id (write-ssa idx)
       inst-id (add-instruction :inst.type/aget
+                               {:inst.arg/arg0 arr-id
+                                :inst.arg/arg1 idx-id})]
+     inst-id)))
+
+(defrecord Nth [arr idx]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [arr-id (write-ssa arr)
+      idx-id (write-ssa idx)
+      inst-id (add-instruction :inst.type/nth
                                {:inst.arg/arg0 arr-id
                                 :inst.arg/arg1 idx-id})]
      inst-id)))

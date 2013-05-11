@@ -57,7 +57,6 @@
                       (:filename opts)
                       (:link-ops opts))]
       (println cmds)
-      (Thread/sleep 1000)
       (when (:verbose opts)
         (println "Linking: " cmds))
       (apply shell/sh cmds)
@@ -65,13 +64,14 @@
         (valAt [this key]
           (.valAt this key nil))
         (valAt [this key not-found]
-          (let [nm (-> (key) :fn)
+          (let [nm (-> key :fn/name)
+                _ (assert nm (str "Bad entity " key))
                 nfn (Function/getFunction (:filename opts)
-                                          (:name nm))
-                mj-ret (:ret-type (expr/return-type nm))
-                rettype (cond
-                         (types/integer-type? mj-ret) Integer
-                         (types/pointer-type? mj-ret) Pointer)]
+                                          nm)
+                mj-ret (-> key :fn/type :type.fn/return :node/type)
+                rettype (case mj-ret
+                          :type/int Integer
+                          :type/pointer Pointer)]
             (fn [& args]
               (.invoke nfn rettype (to-array args)))))))))
 

@@ -57,15 +57,6 @@
                       " got: " (pr-str tp))))
 
 (defrecord IntegerType [width]
-  Validatable
-  (validate [this]
-    (assure (integer? width)))
-  Type
-  (llvm-type [this]
-    (llvm/IntType width))
-  ConstEncoder
-  (encode-const [this val]
-    (llvm/ConstInt (llvm-type this) val true))
   IToPlan
   (add-to-plan [this]
     (gen-plan
@@ -74,6 +65,11 @@
                 :type/width width}
                this)]
      this-id)))
+
+(defrecord PlatformIntegerType []
+  IToPlan
+  (add-to-plan [this]
+    (add-to-plan *int-type*)))
 
 
 (defrecord VoidType []
@@ -321,6 +317,8 @@
 (def I8* (->PointerType (->IntegerType 8)))
 (def Int8* (->PointerType (->IntegerType 8)))
 (def VoidT (->VoidType))
+
+(def IntT (->PlatformIntegerType))
 
 (def Float32 (->FloatType 32))
 (def Float32* (->PointerType Float32))

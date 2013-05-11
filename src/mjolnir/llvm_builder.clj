@@ -351,7 +351,7 @@
     :inst.binop.type/sub :inst.binop.subtype/isub
     :inst.binop.type/mul :inst.binop.subtype/imul
     :inst.binop.type/div :inst.binop.subtype/idiv
-    :inst.binop.type/rem :inst.binop.subtype/irem
+    :inst.binop.type/mod :inst.binop.subtype/imod
     :inst.binop.type/and :inst.binop.subtype/and
     :inst.binop.type/or :inst.binop/subtype/or}
    :type/float
@@ -596,6 +596,24 @@
                                         1
                                         (str "gep_" (:db/id inst)))]
                  (llvm/BuildLoad builder gep (str "load_" (:db/id inst))))))
+
+(defmethod build-instruction :inst.type/nth
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr idx]
+               (let [ptr-type (-> inst
+                                  :inst.arg/arg0
+                                  :node/return-type
+                                  :type/element-type
+                                  pointer-type-to
+                                  build-type)
+                     casted (llvm/BuildBitCast builder ptr ptr-type (str "casted_" (:db/id inst)))
+                     gep (llvm/BuildGEP builder
+                                        casted
+                                        (into-array Pointer [idx])
+                                        1
+                                        (str "gep_" (:db/id inst)))]
+                 gep)))
 
 (def cast-table
   {:inst.cast.type/fp-to-si llvm/LLVMFPToSI

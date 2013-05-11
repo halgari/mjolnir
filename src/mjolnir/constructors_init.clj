@@ -28,6 +28,9 @@
 (defn c-div [& exprs]
   (gen-binops :div exprs))
 
+(defn c-mod [& exprs]
+  (gen-binops :mod exprs))
+
 (defn c-and [& exprs]
   (gen-binops :and exprs))
 
@@ -110,6 +113,9 @@
 (defn c->= [a b]
   (exp/->Cmp :>= a b))
 
+(defn c-not= [a b]
+  (exp/->Cmp :not= a b))
+
 (defn c-dec [a]
   (c-+ a -1))
 
@@ -145,6 +151,9 @@
 
 (defn c-aget [arr idx]
   (exp/->AGet arr idx))
+
+(defn c-nth [arr idx]
+  (exp/->Nth arr idx))
 
 (defn c-eget [vec idx]
   (exp/->EGet vec idx))
