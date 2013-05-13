@@ -1,4 +1,4 @@
-(defproject mjolnir "0.1.5"
+(defproject halgari/mjolnir "0.2.1"
   :description "Compiler Toolkit using LLVM"
   :url "http://github.com/halgari/mjolnir"
   :license {:name "MIT License"}
