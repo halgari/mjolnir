@@ -7,12 +7,12 @@
    [mjolnir.config :refer [*int-type* *target* default-target *float-type*]]
    [mjolnir.ssa :refer :all]
    [mjolnir.llvm-builder :refer :all]
-   [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64*
+   [mjolnir.types :refer [Int64 Int32 Float64 Float32 Float32* Float64* Int64* IntT
                           ->FunctionType VoidT ->ArrayType ->PointerType]]
    [mjolnir.expressions :refer [->Fn ->Binop ->Arg ->If ->Call ->Gbl ->Cmp ->Let ->Local ->Loop ->Recur ->Free ->Malloc
                                 ->ASet ->AGet ->Do ->Module]]
    [mjolnir.constructors-init :refer [defnf]]
-   [mjolnir.core :refer [to-db to-llvm-module build-default-module get-fn]])
+   [mjolnir.core :refer [to-db to-llvm-module build-default-module get-fn to-dll]])
   (:alias c mjolnir.constructors))
 
 
@@ -269,9 +269,19 @@
 
 (deftest compile-struct
   (let [mod (-> (c/module ['mjolnir.simple-tests/test-dll])
-                build-default-module)
+                build-default-module
+                to-dll)
         f (get-fn mod test-dll)]
     (is (= (f 42) 43))))
 
 
+
+(defnf gc-test [IntT x -> Int64*]
+  (new IntT)
+  (new IntT x))
+
+(deftest compile-gc
+  (let [mod (-> (c/module ['mjolnir.simple-tests/gc-test])
+                build-default-module)]
+    (is true)))
 

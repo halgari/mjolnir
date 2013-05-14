@@ -319,6 +319,7 @@
 (def VoidT (->VoidType))
 
 (def IntT (->PlatformIntegerType))
+(def IntT* (->PointerType IntT))
 
 (def Float32 (->FloatType 32))
 (def Float32* (->PointerType Float32))

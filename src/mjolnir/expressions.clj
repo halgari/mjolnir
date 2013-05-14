@@ -6,7 +6,8 @@
             [clojure.java.shell :as shell]
             [clojure.string :as string]
             [mjolnir.targets.target :as target])
-  (:import [com.sun.jna Native Pointer]))
+  (:import [com.sun.jna Native Pointer]
+           [datomic.db.DbId]))
 
 (def genname (comp name gensym))
 
@@ -382,6 +383,34 @@
                                 :node/return-type tp-id})]
      inst-id)))
 
+(defrecord New [type]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp-id (add-to-plan type)
+      ptr-type (add-to-plan (->PointerType type))
+      size-id (write-ssa (->SizeOf type))
+      inst-id (add-instruction :inst.type/new
+                               {:inst.new/type tp-id
+                                :inst.arg/arg0 size-id
+                                :node/return-type ptr-type})]
+     inst-id)))
+
+(defrecord NewArray [type count]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [tp-id (add-to-plan type)
+      ptr-type (add-to-plan (->PointerType type))
+      count-id (write-ssa count)
+      size-id (write-ssa (->Binop :* count-id (->SizeOf type)))
+      inst-id (add-instruction :inst.type/new
+                               {:inst.new/type tp-id
+                                :inst.new/count count-id
+                                :inst.arg/arg0 size-id
+                                :node/return-type ptr-type})]
+     inst-id)))
+
 (defrecord Free [itm]
   SSAWriter
   (write-ssa [this]
@@ -546,7 +575,7 @@
                              (encode-const Int32 member)
                              (genname "eget_"))))
 
-(defrecord New [tp vals]
+#_(defrecord New [tp vals]
   Validatable
   (validate [this]
     (assure (StructType? tp))
@@ -654,6 +683,16 @@
   SSAWriter
   (write-ssa [this]
     (write-ssa (->Const *float-type* this))))
+
+(extend-type datomic.db.DbId
+  SSAWriter
+  (write-ssa [this]
+    (fn [plan]
+      [this plan]))
+  IToPlan
+  (add-to-plan [this]
+    (fn [plan]
+      [this plan])))
 
 
 

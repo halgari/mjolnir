@@ -8,6 +8,7 @@
 ;; integers and floats
 (def ^:dynamic *float-type*)
 (def ^:dynamic *int-type*)
+(def ^:dynamic *gc* nil)
 
 (def ^:dynamic *builder*)
 (def ^:dynamic *module*)

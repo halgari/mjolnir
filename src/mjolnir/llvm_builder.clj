@@ -3,6 +3,7 @@
             [mjolnir.ssa-rules :refer [rules]]
             [datomic.api :refer [db q] :as d]
             [mjolnir.llvmc :as llvm]
+            [mjolnir.gc :refer [build-new]]
             [mjolnir.targets.target :as target]
             [mjolnir.config :refer :all])
   (:import [com.sun.jna Native Pointer]))
@@ -131,7 +132,8 @@
 
 (defmethod build-type :type/fn
   [{return-type :type.fn/return
-    arg-types :type.fn/arguments}]
+    arg-types :type.fn/arguments
+    :as this}]
   (let [arg-types (to-seq arg-types)]
     (llvm/FunctionType (build-type return-type)
                        (llvm/map-parr build-type arg-types)
@@ -146,7 +148,7 @@
                         (:node/type itm)))
 
 (defmethod stub-global :node.type/fn
-  [module {name :fn/name type :fn/type arguments :fn/arguments linkage :fn/linkage}]
+  [module {name :fn/name type :fn/type arguments :fn/argument-names linkage :fn/linkage}]
   (let [f (llvm/AddFunction module name (build-type type))]
     (llvm/SetFunctionCallConv f (target/get-calling-conv *target*
                                                          (= :extern
@@ -230,6 +232,12 @@
                       first)]
     (get-unbuilt-deps dep-blk)
     block))
+
+#_(defn get-block-deps [fnc]
+  (let [deps (q '[:find (distinct ?block-b)
+                  :with ?block-a
+                  :where
+                  ])]))
 
 (defn get-ordered-block-list
   "Gets a list of blocks for a function sorted by suggested build order"
@@ -527,6 +535,10 @@
         llvm-type (build-type tp)]
     (->> (llvm/BuildMalloc builder llvm-type (str "malloc_" (:db/id inst)))
          (assoc defs inst))))
+
+(defmethod build-instruction :inst.type/new
+  [d module builder fn inst defs]
+  (build-new *gc* d module builder fn inst defs))
 
 (defmethod build-instruction :inst.type/free
   [d module builder fn inst defs]

@@ -13,6 +13,7 @@
   (get-calling-conv [this extern?] "Returns the calling convention for a function. Could be different if not extern.")
   (create-target-machine [this opts] "Creates an llvm target machine from this target")
   (emit-to-file [this module opts] "Writes the module to a file with the specified options")
+  (as-exe [this module opts] "Compiles the module as an executable")
   (as-dll [this module opts] "Compiles the module as a shared library"))
 
 (defn find-llvm-target-by-name [name]

@@ -189,6 +189,7 @@
 
 
 
+
 ;; Binop rules - These rules define an attribute that helps emitters
 ;; decide if a binop is a Float or Int operation. FMul is different
 ;; from IMul, so this code specializes that information. 
@@ -298,7 +299,6 @@
 #_(defrule infer-cmp-node [?id ?attr ?val]
   "Infer cmp predicate"
   [?id :inst/type :inst.type/cmp]
-  [(println "foo" ?id) ?v]
   [?id :inst.arg/arg0 ?arg0]
   [?id :inst.arg/arg1 ?arg1]
   [?id :inst.cmp/pred ?pred]
@@ -309,3 +309,34 @@
   [(vector ?arg0-tg ?arg1-tg ?pred) ?key]
   [(mjolnir.ssa-rules/cmp-map ?key) ?val]
   [(identity :inst.cmp/sub-pred) ?attr])
+
+
+
+
+
+(comment
+
+  ;; For a block, gets the instructions in the block
+  (defrule instruction-seq [?block ?inst]
+    "All instructions attached to the block should be considered"
+    [?block :inst/block ?inst])
+
+  (defrule instruction-seq [?block ?inst]
+    "Terminator instructions should be considered"
+    [?block :block/terminator-inst ?inst])
+
+  (defrule depends-on [?block-a ?block-b]
+    "Rule passes if block-a requires block-b before it can be built"
+    [(mjolnir.ssa-rules/arg-k) [?attr ...]]
+    (instruction-seq ?block-a ?inst-a)
+    [?inst-a ?attr ?inst-b]
+    [?inst-b :inst/block ?block-b]
+    [(not= ?block-a ?block-b)])
+
+  (defrule depends-on [?block-a ?block-b]
+    "Rule passes if block-a requires block-b before it can be built"
+    [(mjolnir.ssa-rules/arg-k) [?attr ...]]
+    (instruction-seq ?block-a ?inst-a)
+    [?inst-a ?attr ?inst-b]
+    [?inst-b :phi/block ?block-b]
+    [(not= ?block-a ?block-b)]))

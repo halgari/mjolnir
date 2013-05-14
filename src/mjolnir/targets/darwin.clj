@@ -49,6 +49,15 @@
         (assert false (.getString (llvm/value-at err) 0)))
       (llvm/DisposeMessage (llvm/value-at err))
       file))
+  (as-exe [this module opts]
+    (let [f (target/emit-to-file this module (assoc (dissoc opts :filename) :output-type :asm))
+          cmds (list* "cc" f "-o"
+                      (or (:filename opts)
+                          "a.out")
+                      (:link-ops opts))]
+      (when (:verbose opts)
+        (println "Linking: " cmds))
+      (apply shell/sh cmds)))
   (as-dll [this module opts]
     (let [f (target/emit-to-file this module (assoc (dissoc opts :filename) :output-type :asm))
           opts (merge {:filename (llvm/temp-file "darwin_dll" ".dylib")}

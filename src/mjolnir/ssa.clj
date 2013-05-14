@@ -23,7 +23,7 @@
 
 (def kw->attrs
   {:one [:db/cardinality :db.cardinality/one]
-   :many [:db/cardinality :db.cardinalty/many]
+   :many [:db/cardinality :db.cardinality/many]
    :ref [:db/valueType :db.type/ref]
    :keyword [:db/valueType :db.type/keyword]
    :int [:db/valueType :db.type/long]
@@ -53,6 +53,8 @@
    :inst/block #{:one :ref}
    :inst/next #{:one :ref}
    :inst/type #{:one :keyword}
+
+   :inst/args #{:many :ref}
 
    :phi/block #{:one :ref}
    :phi.value/node #{:one :ref}
@@ -116,6 +118,9 @@
    :inst.callp/fn #{:one :ref}
 
    :inst.malloc/type #{:one :ref}
+   :inst.new/type #{:one :ref}
+   :inst.new/count #{:one :ref}
+   :inst.new/size #{:one :ref}
 
    ;; args
    :inst.arg/arg0 #{:one :ref}
@@ -198,18 +203,17 @@
                   (pr-str (count (set (keys ents)))
                           (count (set (keys valid-ids)))
                           (count new-ents)))
-        data (-> (reduce
-                  (fn [acc [k attr val]]
-                    (assert (and k (get acc k)) (pr-str "Bad db-id given in update"
-                                                        k
-                                                        (get valid-ids k)
-                                                        " in "
-                                                        (keys valid-ids)))
-                    (assoc-in acc [k attr] val))
-                  ents
-                  updates)
-                 vals)
 
+        data (concat #_(mapcat (fn [ent]
+                               (let [ent (dissoc ent :db/id)]
+                                 (map (partial vector :db/add (:db/id ent))
+                                      (keys ent)
+                                      (vals ent))))
+                               (vals ents))
+                     (vals ents)
+                     (map (fn [[id k v]]
+                            [:db/add id k v])
+                          updates))
         {:keys [db-before db-after tempids tx-data]}
         @(d/transact conn data)
         ptempids (zipmap
@@ -371,7 +375,7 @@
                         {:list/tail last}
                         {})
                       {:list/head id})]
-             (singleton ent ent))]
+             (assert-entity ent ent))]
    ent-id))
 
 (defn assert-seq [seq]
@@ -464,6 +468,12 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
    [term (get-in-plan [:state block])]
    term))
 
+(defn arg-ids [attrs-map]
+  (let [ks (concat [:inst.call/fn
+                    :inst.callp/fn]
+                   idx->arg)]
+    (->> (map attrs-map ks)
+         (remove nil?))))
 
 (defn add-instruction
   ([instruction attrs-map]
@@ -489,6 +499,8 @@ The order of the nodes cannot be set, as it shouldn't matter in the output seima
        _ (if prev-instruction-id
            (update-entity prev-instruction-id :inst/next inst-id)
            (no-op))
+       _ (add-all (map #(update-entity inst-id :inst/args %)
+                       (arg-ids attrs-map)))
        _ (assoc-in-plan [:block-states block-id :prev-instruction-id] inst-id)]
       inst-id)))
 

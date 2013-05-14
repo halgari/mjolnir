@@ -1,14 +1,16 @@
 (ns mjolnir.core
   (:require
    [mjolnir.types :refer [Int64 Float64]]
-   [mjolnir.targets.target :refer [as-dll]]
+   [mjolnir.targets.target :refer [as-dll as-exe]]
    [mjolnir.expressions :as expr]
    [mjolnir.inference :refer [infer-all]]
    [mjolnir.validation :refer [validate]]
    [clojure.test :refer :all]
    [datomic.api :refer [q db] :as d]
-   [mjolnir.config :refer [*int-type* *float-type* *target* default-target]]
+   [mjolnir.config :refer [*gc* *int-type* *float-type* *target* default-target]]
    [mjolnir.ssa :refer :all]
+   [mjolnir.gc :as gc]
+   [mjolnir.gc.boehm :refer [->BoehmGC]]
    [mjolnir.llvm-builder :refer [build dump optimize verify]]))
 
 (defn to-db [m]
@@ -18,6 +20,8 @@
          nil)
         (get-plan conn)
         commit)
+    (when *gc*
+      (gc/add-globals *gc* conn))
     {:conn conn}))
 
 (defn to-llvm-module [{:keys [conn] :as ctx}]
@@ -54,11 +58,13 @@
 (defn build-default-module [m]
   (binding [*int-type* Int64
             *float-type* Float64
+            *gc* (->BoehmGC)
             *target* (default-target)]
     (-> (to-db m)
-        (to-llvm-module)
-        (to-dll))))
+        (to-llvm-module))))
 
+(defn to-exe [{:keys [module] :as exe} filename]
+  (as-exe (default-target) module {:verbose true}))
 
 
 

@@ -7,14 +7,19 @@
             [clojure.core.logic.datomic :as ld]))
 
 (defn get-inferences [db]
+  {:pre [db]}
   (let [notype (ffirst (q '[:find ?id
                             :where
                             [?id :node/type :node.type/unknown]]
                           db))]
+    (assert notype (pr-str "Can't find unknown type"
+                           (q '[:find ?tp
+                                :where
+                                [_ :node/type ?tp]]
+                              db)))
     (concat (q '[:find ?id ?attr ?val
                  :in $ % ?notype
                  :where
-                 #_[?id :node/return-type ?notype]
                  (infer-node ?id ?attr ?val)]
                db
                @rules

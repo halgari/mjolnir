@@ -73,7 +73,7 @@
         extern-name (if (string? (:exact (meta name)))
                       (:exact (meta name))
                       (clojure.core/name name))]
-    (assert ret-type "No return type given, did you forget the -> type?")
+    (assert ret-type (str "Compiling: " name "No return type given, did you forget the -> type?"))
     `(let [nsname# (.getName ~'*ns*)
            ~'_ (defn ~name
          [& args#]
@@ -258,8 +258,10 @@
 (defn c-new
   "Constructs a new struct (using malloc), and sets the first (count vals) values
    to the values provide."
-  [tp & vals]
-  (exp/->New tp vals))
+  ([tp]
+     (exp/->New tp))
+  ([tp cnt]
+     (exp/->NewArray tp cnt)))
 
 (defn c-global [nm val tp]
   (exp/->Global nm val tp))
@@ -351,7 +353,7 @@
    :else
    x))
 
-(defn- convert-form [body]
+(defn convert-form [body]
   (doall (map convert-form-1 body)))
 
 (defmacro defnf [& body]
