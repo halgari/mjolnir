@@ -11,9 +11,9 @@
   (:import [com.sun.jna Native Pointer Memory]))
 
 (c/defn ^{:exact "GC_malloc"} ^:extern GC_malloc [IntT size -> IntT*])
-(c/defn ^{:exact "GC_init"} ^:extern GC_init [-> VoidT])
+(c/defn ^{:exact "GC_init"} ^:extern GC_init [-> IntT])
 
-#_(c/defn ^{:exact "___init_GC___"} init_gc [-> IntT]
+(c/defn ^{:exact "___init_GC___"} init_gc [-> IntT]
   (GC_init)
   0)
 

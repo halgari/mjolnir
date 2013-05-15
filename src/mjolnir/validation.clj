@@ -15,4 +15,5 @@
 (defn validate [db-val]
   (let [errors (get-errors db-val)]
     (assert (zero? (count (get-errors db-val)))
-            (str "Errors: " errors))))
+            (str "Errors: " (vec (for [[id msg] errors]
+                                   [msg (d/touch (d/entity db-val id))]))))))

@@ -91,6 +91,7 @@
    :type.member/struct #{:one :ref}
    :type.member/type #{:one :ref}
    :type.struct/extends #{:one :ref}
+   :type.struct/name #{:one :string}
    :type.member/name #{:one :keyword}
 
    :type/unknown #{:one :keyword}
@@ -181,7 +182,12 @@
 
 (defn find-singleton [db sing]
   (assert db (pr-str db))
-  (ffirst (q (get-query sing) db)))
+  (let [results (->> (q (get-query sing) db)
+                     (filter (fn [[id]]
+                               (= (count sing)
+                                  (count (d/touch (d/entity db id)))))))]
+    (assert (>= 1 (count results)))
+    (ffirst results)))
 
 (defrecord TxPlan [conn db singletons new-ents tempids])
 
@@ -375,7 +381,7 @@
                         {:list/tail last}
                         {})
                       {:list/head id})]
-             (assert-entity ent ent))]
+             (singleton ent ent))]
    ent-id))
 
 (defn assert-seq [seq]

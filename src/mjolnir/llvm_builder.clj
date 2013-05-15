@@ -513,10 +513,24 @@
 (defmethod build-instruction :inst.type/call
   [d module builder fn inst defs]
   (let [args (map defs (args-seq inst))
-        fnc (defs (:inst.call/fn inst))]
+        fnc (defs (:inst.call/fn inst))
+        is-void? (-> inst
+                     :inst.call/fn
+                     :node/return-type
+                     :node/type
+                     (= :type/void))]
     (assert (and (every? identity args) fnc))
+    (assert (= (llvm/CountParams fnc)
+               (count args))
+            (str "Arg Count mismatch: "
+                 (-> inst :inst.call/fn :inst.gbl/name)
+                 " "
+                 (llvm/CountParams fnc)
+                 " called with "
+                 (count args)))
     (->>
-     (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (str (:db/id inst)))
+     (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (when-not is-void?
+                                                                              (str (:db/id inst))))
      (assoc defs inst))))
 
 (defmethod build-instruction :inst.type/callp

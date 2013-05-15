@@ -1,5 +1,6 @@
 (ns mjolnir.ssa-rules
-  (:require [clojure.pprint  :refer [pprint]]))
+  (:require [clojure.pprint  :refer [pprint]]
+            [datomic.api :refer [db q] :as d]))
 
 (def rules (atom []))
 
@@ -186,6 +187,78 @@
   #_(return-type ?id ?this-tp)
   [(not= ?arg0-tp ?arg1-tp)]
   [(identity "Binop args must match return type") ?msg])
+
+
+(defn func-arg-count-dont-match? [db tp-id call-id]
+  (let [call-ent (d/entity db call-id)
+        tp-ent (d/entity db tp-id)]
+    (not= (count (:fn.arg/_fn tp-ent))
+          ;; decrement this, as we include :inst.call/fn
+          (dec (count (:inst/args call-ent))))))
+
+(defrule validate [?id ?msg]
+  "Calls must match argument counts"
+  [?id :inst/type :inst.type/call]
+  [?id :inst.call/fn ?gbl]
+  [?gbl :inst.gbl/name ?name]
+  [?gbl :node/return-type ?tp]
+  [(mjolnir.ssa-rules/func-arg-count-dont-match? $ ?tp ?id)]
+  [(str "Call signature doesn't match function, calling " ?name) ?msg])
+
+
+(defrule validate [?id ?msg]
+  "Args must match types"
+  [?id :inst/type :inst.type/call]
+  [?id :inst.arg/arg0 ?arg]
+  [?arg :node/return-type ?arg-t]
+  [?id :inst.call/fn ?fn]
+  [?fn :inst.gbl/name ?name]
+  [?fn :node/return-type ?fn-t]
+  [?fn-arg :fn.arg/fn ?fn-t]
+  [?fn-arg :fn.arg/idx 0]
+  [?fn-arg :fn.arg/type ?fn-arg-t]
+  [(not= ?fn-arg-t ?arg-t)]
+  [?fn-arg-t :node/type ?fn-arg-t-node]
+  [?arg-t :node/type ?arg-t-node]
+  [?id :inst/block ?block]
+  [?block :block/fn ?parent-fn]
+  [?parent-fn :fn/name ?parent-fn-name]
+  [(str "Arg0 doesn't match in call to "
+        ?name
+        " types "
+        ?fn-arg-t-node
+        " "
+        ?arg-t-node
+        " in "
+        ?parent-fn-name) ?msg])
+
+(defrule validate [?id ?msg]
+  "Args must match types"
+  [?id :inst/type :inst.type/call]
+  [?id :inst.arg/arg1 ?arg]
+  [?arg :node/return-type ?arg-t]
+  [?id :inst.call/fn ?fn]
+  [?fn :inst.gbl/name ?name]
+  [?fn :node/return-type ?fn-t]
+  [?fn-arg :fn.arg/fn ?fn-t]
+  [?fn-arg :fn.arg/idx 1]
+  [?fn-arg :fn.arg/type ?fn-arg-t]
+  [(not= ?fn-arg-t ?arg-t)]
+  [(str "Arg1 doesn't match in call to " ?name) ?msg])
+
+(defrule validate [?id ?msg]
+  "Args must match types"
+  [?id :inst/type :inst.type/call]
+  [?id :inst.arg/arg2 ?arg]
+  [?arg :node/return-type ?arg-t]
+  [?id :inst.call/fn ?fn]
+  [?fn :inst.gbl/name ?name]
+  [?fn :node/return-type ?fn-t]
+  [?fn-arg :fn.arg/fn ?fn-t]
+  [?fn-arg :fn.arg/idx 2]
+  [?fn-arg :fn.arg/type ?fn-arg-t]
+  [(not= ?fn-arg-t ?arg-t)]
+  [(str "Arg2 doesn't match in call to " ?name) ?msg])
 
 
 

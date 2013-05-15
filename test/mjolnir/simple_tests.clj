@@ -267,7 +267,7 @@
   (+ x 1))
 
 
-(deftest compile-struct
+#_(deftest compile-dll
   (let [mod (-> (c/module ['mjolnir.simple-tests/test-dll])
                 build-default-module
                 to-dll)
@@ -277,6 +277,7 @@
 
 
 (defnf gc-test [IntT x -> Int64*]
+  (:___init_GC___)
   (new IntT)
   (new IntT x))
 
@@ -284,4 +285,38 @@
   (let [mod (-> (c/module ['mjolnir.simple-tests/gc-test])
                 build-default-module)]
     (is true)))
+
+(defnf void-t [-> VoidT]
+  42)
+
+
+(defnf void-t-caller [-> Int64]
+  (void-t)
+  42)
+
+#_(deftest compile-call-voidT
+  (let [mod (-> (c/module ['mjolnir.simple-tests/void-t
+                           'mjolnir.simple-tests/void-t-caller])
+                build-default-module)]
+    (is true)))
+
+
+(c/defstruct A
+  :members [Int64 x])
+
+(def A* (->PointerType A))
+
+(c/defstruct B
+  :members [A* a])
+
+(def B* (->PointerType B))
+
+(defnf b-stuff [B* foo -> B*]
+  foo)
+
+(deftest compile-call-voidT
+  (let [mod (-> (c/module ['mjolnir.simple-tests/b-stuff])
+                build-default-module)]
+    (is true)))
+
 

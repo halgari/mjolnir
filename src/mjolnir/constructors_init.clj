@@ -232,7 +232,7 @@
         extends (:extends opts)
         members (:members opts)
         parted (partition 2 members)]
-    `(do (def ~nm (c-struct ~(name nm)
+    `(do (def ~nm (c-struct (str (.getName ~'*ns*) "/" ~(name nm))
                             ~(merge
                              opts
                              {:extends extends

@@ -63,8 +63,12 @@
     (-> (to-db m)
         (to-llvm-module))))
 
-(defn to-exe [{:keys [module] :as exe} filename]
-  (as-exe (default-target) module {:verbose true}))
+(defn to-exe
+  [{:keys [module] :as exe} filename & opts]
+  (as-exe (default-target) module (merge
+                                   (apply hash-map opts)
+                                   {:verbose true
+                                    :filename filename})))
 
 
 

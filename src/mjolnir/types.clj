@@ -117,28 +117,6 @@
 
 
 (defrecord PointerType [etype]
-  Validatable
-  (validate [this]
-    
-    (assure-type etype))
-  Type
-  (llvm-type [this]
-    (llvm/PointerType (llvm-type etype)
-                      (default-address-space *target*)))
-  ElementPointer
-  (etype [this]
-    (:etype this))
-  ConstEncoder
-  (encode-const [this val]
-    (if (nil? val)
-      (llvm/ConstNull (llvm-type this))
-      (if (and (= etype (->IntegerType 8))
-               (string? val))
-        (const-string-array val)
-        (let [nm (:name val)
-              ng (llvm/GetNamedGlobal *module* nm)]
-          (assert ng (str "Could not find global: " nm))
-          ng))))
   IToPlan
   (add-to-plan [this]
     (gen-plan
@@ -219,11 +197,11 @@
                                  :type.fn/return ret}
                                 (when seq
                                   {:type.fn/arguments seq})))
-      _ (assert-all (map (fn [x idx]
-                           [{:fn.arg/type x
-                             :fn.arg/idx idx
-                             :fn.arg/fn this-id}
-                            nil])
+      _ (add-all (map (fn [x idx]
+                        (singleton {:fn.arg/type x
+                                    :fn.arg/idx idx
+                                    :fn.arg/fn this-id}
+                                   nil))
                       args
                       (range)))]
      this-id)))
@@ -266,20 +244,20 @@
                       (map first)
                       (map add-to-plan)
                       add-all)
-      struct-id (assert-entity (merge {:node/type :type/struct}
-                                      (when extends-id
-                                        {:type.struct/extends extends-id})))
-      members-idx (assert-all (map
-                               (fn [id name idx]
-                                 [{:node/type :type/member
-                                   :type.member/idx idx
-                                   :type.member/name name
-                                   :type.member/type id
-                                   :type.member/struct struct-id}
-                                  nil])
-                               member-ids
-                               (map second (flatten-struct this))
-                               (range)))]
+      struct-id (singleton (merge {:node/type :type/struct
+                                   :type.struct/name name}
+                                  (when extends-id
+                                    {:type.struct/extends extends-id})))
+      members-idx (add-all (map
+                            (fn [id name idx]
+                              (singleton {:node/type :type/member
+                                          :type.member/idx idx
+                                          :type.member/name name
+                                          :type.member/type id
+                                          :type.member/struct struct-id}))
+                            member-ids
+                            (map second (flatten-struct this))
+                            (range)))]
      struct-id)))
 
 (defn StructType? [tp]

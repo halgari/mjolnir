@@ -3,7 +3,7 @@
   (:require [clojure.java.shell :as shell]
             [clojure.string :as string]))
 
-(def ^:dynamic *lib* 'LLVM-3.3svn)
+(def ^:dynamic *lib* 'LLVM-3.4svn)
 
 (def strip-chars 4)
 
