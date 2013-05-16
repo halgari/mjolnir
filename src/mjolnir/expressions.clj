@@ -422,6 +422,18 @@
                                 :node/return-type void})]
      inst-id)))
 
+(defrecord Atomic [ptr op arg]
+  SSAWriter
+  (write-ssa [this]
+    (gen-plan
+     [ptr-id (write-ssa ptr)
+      arg-id (write-ssa arg)
+      inst-id (add-instruction :inst.type/atomic
+                               {:inst.arg/arg0 ptr-id
+                                :inst.arg/arg1 arg-id
+                                :inst.atomic/op op})]
+     inst-id)))
+
 (defrecord ASet [arr idx val]
   SSAWriter
   (write-ssa [this]
@@ -620,28 +632,7 @@
      [body-ids (add-all (map write-ssa body))]
      (last body-ids))))
 
-(defrecord Global [name val type]
-  Validatable
-  (validate [this]
-    (assure (string? name))
-    (assure (type? type)))
-  Expression
-  (return-type [this]
-    type)
-  (build [this]
-    (when (not (= val :extern))
-      (let [gbl (llvm/GetNamedGlobal *module* name)]
-        (assert gbl (str "Can't find Global " (pr-str this)))
-        (llvm/SetInitializer
-         gbl
-         (encode-const type val))
-        gbl)))
-  GlobalExpression
-  (stub-global [this]
-    (llvm/AddGlobalInAddressSpace *module*
-                    (llvm-type type)
-                    name
-                    (target/default-address-space *target*)))
+(defrecord Global [name type val]
   IToPlan
   (add-to-plan [this]
     (gen-plan

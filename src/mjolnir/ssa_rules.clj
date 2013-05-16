@@ -173,6 +173,12 @@
   [?id :inst.get/member ?nm]
   (member-idx ?etype ?nm ?idx ?type))
 
+(defrule return-type [?id ?type]
+  "Atomic ops return the same type as the input value"
+  [?id :inst/type :inst.type/atomic]
+  [?id :inst.arg/arg1 ?arg1]
+  (return-type ?arg1 ?type))
+
 
 
 

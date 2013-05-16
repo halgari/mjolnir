@@ -263,19 +263,21 @@
   ([tp cnt]
      (exp/->NewArray tp cnt)))
 
-(defn c-global [nm val tp]
-  (exp/->Global nm val tp))
+(defn c-global [nm tp val]
+  (exp/->Global nm tp val))
 
-(defmacro c-def [nm val arrow tp]
-  (assert (= arrow '->) "must include a -> and a type")
+(defn c-atomic [ptr op val]
+  (exp/->Atomic ptr op val))
+
+(defmacro c-def [nm tp val]
   `(let [nsname# (.getName ~'*ns*)]
      (def ~nm (exp/->Gbl (str nsname# "/" ~(name nm))))
      (register-global
       nsname#
       ~(name nm)
       (c-global (str nsname# "/" ~(name nm))
-                ~val
-                ~tp))))
+                ~tp
+                ~val))))
 
 
 (defmacro c-for [[var [from to step]] & body]

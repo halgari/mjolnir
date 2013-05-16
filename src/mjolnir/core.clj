@@ -24,14 +24,18 @@
       (gc/add-globals *gc* conn))
     {:conn conn}))
 
-(defn to-llvm-module [{:keys [conn] :as ctx}]
-  (infer-all conn)
-  (validate (db conn))
-  (let [built (build (db conn))]
-    (verify built)
-    (optimize built)
-    #_(dump built)
-    (assoc ctx :module built)))
+(defn to-llvm-module
+  ([m]
+     (to-llvm-module m false))
+  ([{:keys [conn] :as ctx} dump?]
+      (infer-all conn)
+      (validate (db conn))
+      (let [built (build (db conn))]
+        (verify built)
+        (optimize built)
+        (when dump?
+          (dump built))
+        (assoc ctx :module built))))
 
 (defn to-dll [{:keys [module] :as ctx}]
   (assoc ctx :dll (as-dll (default-target) module {:verbose true})))
@@ -55,13 +59,16 @@
   (-> (to-db m)
       (to-llvm-module)))
 
-(defn build-default-module [m]
-  (binding [*int-type* Int64
-            *float-type* Float64
-            *gc* (->BoehmGC)
-            *target* (default-target)]
-    (-> (to-db m)
-        (to-llvm-module))))
+(defn build-default-module
+  ([m]
+     (build-default-module m false))
+  ([m dump?]
+     (binding [*int-type* Int64
+               *float-type* Float64
+               *gc* (->BoehmGC)
+               *target* (default-target)]
+       (-> (to-db m)
+           (to-llvm-module dump?)))))
 
 (defn to-exe
   [{:keys [module] :as exe} filename & opts]

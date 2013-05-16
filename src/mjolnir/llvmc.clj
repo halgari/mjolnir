@@ -182,6 +182,7 @@
 (defnative Pointer LLVMSizeOf)
 (defnative Pointer LLVMConstNull)
 (defnative Pointer LLVMBuildBinOp)
+(defnative Pointer LLVMBuildAtomicRMW)
 
 (defnative Pointer LLVMBuildExtractElement)
 (defnative Pointer LLVMBuildInsertElement)
@@ -195,6 +196,8 @@
 (defnative Integer LLVMAddLoopVectorizePass)
 (defnative Integer LLVMAddLoopUnrollPass)
 (defnative Pointer LLVMAddFunctionInliningPass)
+
+
 
 (defn AddDefaultPasses [pm]
   (doto pm
@@ -404,6 +407,31 @@
    ;; Exception handling
    LLVMResume
    LLVMLandingPad])
+
+(defenum LLVMAtomicOrdering
+  0
+  [LLVMAtomicOrderingNotAtomic
+  LLVMAtomicOrderingUnordered
+  LLVMAtomicOrderingMonotonic
+  __ ;; No ID 3 enum
+  LLVMAtomicOrderingAcquire
+  LLVMAtomicOrderingRelease
+  LLVMAtomicOrderingAcquireRelease
+  LLVMAtomicOrderingSequentiallyConsistent])
+
+(defenum LLVMAtomicRMWBinOp
+  0
+  [LLVMAtomicRMWBinOpXchg
+   LLVMAtomicRMWBinOpAdd
+   LLVMAtomicRMWBinOpSub
+   LLVMAtomicRMWBinOpAnd
+   LLVMAtomicRMWBinOpNand
+   LLVMAtomicRMWBinOpOr
+   LLVMAtomicRMWBinOpXor
+   LLVMAtomicRMWBinOpMax
+   LLVMAtomicRMWBinOpMin
+   LLVMAtomicRMWBinOpUMax
+   LLVMAtomicRMWBinOpUMin])
 
 (defnative Integer LLVMInitializeCppBackendTargetInfo)
 (defnative Integer LLVMInitializeCppBackendTarget)

@@ -32,7 +32,6 @@
    :string [:db/valueType :db.type/string]
    :unique [:db/unique :db.unique/value]})
 
-
 (defn default-schema []
   {:list/tail #{:one :ref}
    :fn/type #{:one :ref}
@@ -122,6 +121,8 @@
    :inst.new/type #{:one :ref}
    :inst.new/count #{:one :ref}
    :inst.new/size #{:one :ref}
+   
+   :inst.atomic/op #{:one :keyword}
 
    ;; args
    :inst.arg/arg0 #{:one :ref}

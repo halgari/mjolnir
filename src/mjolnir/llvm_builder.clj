@@ -329,7 +329,9 @@
   (when-not (:global/extern? this)
     (let [gbl (llvm/GetNamedGlobal module name)]
       (assert gbl (str "Can't find Global " (pr-str name)))
-      (llvm/SetInitializer gbl (encode-const type val))
+      (llvm/SetInitializer gbl (encode-const type
+                                             (or (:const/int-value this)
+                                                 (:const/float-value this))))
       gbl)))
 
 
@@ -532,6 +534,32 @@
      (llvm/BuildCall builder fnc (llvm/map-parr identity args) (count args) (when-not is-void?
                                                                               (str (:db/id inst))))
      (assoc defs inst))))
+
+(def atomic-mappings
+  {:cas  llvm/LLVMAtomicRMWBinOpXchg
+   :+    llvm/LLVMAtomicRMWBinOpAdd
+   :-    llvm/LLVMAtomicRMWBinOpSub
+   :and  llvm/LLVMAtomicRMWBinOpAnd
+   :nand llvm/LLVMAtomicRMWBinOpNand
+   :or   llvm/LLVMAtomicRMWBinOpOr
+   :xor  llvm/LLVMAtomicRMWBinOpXor
+   :max  llvm/LLVMAtomicRMWBinOpMax
+   :min  llvm/LLVMAtomicRMWBinOpMin
+   :umax llvm/LLVMAtomicRMWBinOpUMax
+   :umin llvm/LLVMAtomicRMWBinOpUMin})
+
+(defmethod build-instruction :inst.type/atomic
+  [d module builder fn inst defs]
+  (unpack-args defs inst
+               [ptr val]
+               (let [mapping (atomic-mappings (:inst.atomic/op inst))]
+                 (assert mapping (str "Invalid Atomic Operation " (:inst.atomic/op inst)))
+                 (llvm/BuildAtomicRMW builder
+                                      mapping
+                                      ptr
+                                      val
+                                      llvm/LLVMAtomicOrderingSequentiallyConsistent
+                                      false))))
 
 (defmethod build-instruction :inst.type/callp
   [d module builder fn inst defs]

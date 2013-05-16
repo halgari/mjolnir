@@ -320,3 +320,18 @@
     (is true)))
 
 
+
+
+(c/def counter Int64 0)
+
+(c/defn atomic-inc [-> Int64]
+  (c/atomic counter :+ 1))
+
+(deftest compile-atomic
+  (let [mod (-> (c/module ['mjolnir.simple-tests/counter
+                           'mjolnir.simple-tests/atomic-inc])
+                (build-default-module true)
+                (to-dll))]
+    (is true)))
+
+
