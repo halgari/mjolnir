@@ -675,6 +675,11 @@
   (write-ssa [this]
     (write-ssa (->Const *float-type* this))))
 
+(extend-type java.lang.Bool
+  SSAWriter
+  (write-ssa [this]
+    (write-ssa (->Const Int1 (when this 1 0)))))
+
 (extend-type datomic.db.DbId
   SSAWriter
   (write-ssa [this]
