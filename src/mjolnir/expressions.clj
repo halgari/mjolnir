@@ -27,7 +27,8 @@
 (defn- const-data [val]
   (cond
    (integer? val) {:const/int-value val}
-   (float? val) {:const/float-value val}))
+   (float? val) {:const/float-value val}
+   (instance? java.lang.Boolean val) {:const/int-value (int val)}))
 
 (defrecord Const [type val]
   SSAWriter
@@ -145,6 +146,13 @@
                            {:inst.gbl/name (full-name name)}
                            this)]
      gbl)))
+
+(extend-type clojure.lang.Keyword
+  SSAWriter
+  (write-ssa [this]
+    (write-ssa (->Gbl this))))
+
+
 
 (defrecord SizeOf [tp]
   Validatable
@@ -670,15 +678,20 @@
   (write-ssa [this]
     (write-ssa (->Const *int-type* this))))
 
+(extend-type java.lang.Integer
+  SSAWriter
+  (write-ssa [this]
+    (write-ssa (->Const *int-type* this))))
+
 (extend-type java.lang.Double
   SSAWriter
   (write-ssa [this]
     (write-ssa (->Const *float-type* this))))
 
-(extend-type java.lang.Bool
+(extend-type java.lang.Boolean
   SSAWriter
   (write-ssa [this]
-    (write-ssa (->Const Int1 (when this 1 0)))))
+    (write-ssa (->Const Int1 (when this 0 1)))))
 
 (extend-type datomic.db.DbId
   SSAWriter

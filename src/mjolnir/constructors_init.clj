@@ -122,6 +122,9 @@
 (defn c-inc [a]
   (c-+ a 1))
 
+(defn c-callp [f & args]
+  (exp/->CallPointer f args))
+
 (defn c-module [includes & body]
   (doto (exp/->Module (-> (reduce (fn [a x]
                                     (if (namespace x)
