@@ -54,6 +54,8 @@
 (defnative Integer LLVMFindFunction)
 
 (defnative Pointer LLVMAppendBasicBlock)
+(defnative Pointer LLVMGetInsertBlock)
+(defnative Pointer LLVMGetBasicBlockParent)
 (defnative Pointer LLVMCreateBuilder)
 
 (defnative Pointer LLVMGetParam)
@@ -183,6 +185,7 @@
 (defnative Pointer LLVMConstNull)
 (defnative Pointer LLVMBuildBinOp)
 (defnative Pointer LLVMBuildAtomicRMW)
+(defnative Pointer LLVMBuildIsNull)
 
 (defnative Pointer LLVMBuildExtractElement)
 (defnative Pointer LLVMBuildInsertElement)
