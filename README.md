@@ -2,7 +2,7 @@
 
 Mjolnir is a Clojure library designed to simplify native code generation. It is useful for writing on-the-fly high performance code, writing programming languages, or simply for exploring new how code performs on different platforms. 
 
-Internally, Mjolnir wraps the LLVM library. It then provides several layers of abstractions on top of LLVM. See the examples in the repository for indepth examples of the library at work. 
+Internally, Mjolnir wraps the LLVM library. It then provides several layers of abstractions on top of LLVM. See the examples in the repository for in-depth examples of the library at work. 
 
 NOTE: the real work lately has been going on in the datomic branch. See recent additions to that branch for up-to-date examples. 
 
@@ -20,12 +20,11 @@ The alias line performs some magic that allows code like the following from with
       (c/* a a))
 
 
-Expressions - Constructors emit Mjolnir expressions. These live in `mjolnir.types` and `mjolnir.expressions`. These expressions are simply Clojure records that implement several common protocols. Once constructed, these expressions can be built via `mjolnir.expressions/build`. But most of the time this function will only be invoked against `mjolnir.expressions/Module` as this record contains alot of setup code that is neede for the other expressions to compile. 
+Expressions - Constructors emit Mjolnir expressions. These live in `mjolnir.types` and `mjolnir.expressions`. These expressions are simply Clojure records that implement several common protocols. Once constructed, these expressions can be built via `mjolnir.expressions/build`. But most of the time this function will only be invoked against `mjolnir.expressions/Module` as this record contains a lot of setup code that is neede for the other expressions to compile. 
 
 LLVMC - Expressions invoke the many functions found in `mjolnir.llvmc`. This namespace simply wraps the many functions found in LLVM. The wrapping is done via JNA. 
 
-LLVM-c - Internally, LLVM exposes the C++ api as a c library known as llvm-c.
-
+LLVM-c - Internally, LLVM exposes the C++ api as a C library known as llvm-c.
 
 LLVM - And finally, at the bottom we have the llvm library
 
