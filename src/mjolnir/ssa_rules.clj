@@ -271,7 +271,7 @@
 
 ;; Binop rules - These rules define an attribute that helps emitters
 ;; decide if a binop is a Float or Int operation. FMul is different
-;; from IMul, so this code specializes that information. 
+;; from IMul, so this code specializes that information.
 
 (comment
   (defrule infer-binop [?id ?op]
@@ -305,18 +305,18 @@
   "Larger Ints truncate to smaller ints"
   [?arg0-t :node/type :type/int]
   [?arg1-t :node/type :type/int]
-  [?arg0-t :type/length ?arg0-length]
-  [?arg1-t :type/length ?arg1-length]
-  [(> ?arg0-length ?arg1-length)]
+  [?arg0-t :type/width ?arg0-width]
+  [?arg1-t :type/width ?arg1-width]
+  [(> ?arg0-width ?arg1-width)]
   [(identity :inst.cast.type/trunc) ?op])
 
 (defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
-  "Larger Ints truncate to smaller ints"
+  "Smaller ints upcast to larger ints"
   [?arg0-t :node/type :type/int]
   [?arg1-t :node/type :type/int]
-  [?arg0-t :type/length ?arg0-length]
-  [?arg1-t :type/length ?arg1-length]
-  [(< ?arg0-length ?arg1-length)]
+  [?arg0-t :type/width ?arg0-width]
+  [?arg1-t :type/width ?arg1-width]
+  [(< ?arg0-width ?arg1-width)]
   [(identity :inst.cast.type/zext) ?op])
 
 (defrule cast-subtype [?id ?arg0-t ?arg1-t ?op]
